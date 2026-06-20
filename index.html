@@ -113,10 +113,12 @@ if err != nil {
     return result.Fail(&quot;验证码保存失败&quot;)
 }
 
-2. 核心业务：无感“自动注册”（Find or Create）
+### 2. 核心业务：无感“自动注册”（Find or Create）
 在登录验证通过后，系统需要校验该手机号是否已经是我们的用户。为了提升用户体验，我们采用“自动注册”逻辑：如果数据库中查不到该用户，说明是第一次来的新用户，系统会自动为其创建账号。
 
 这里充分体现了 Go 语言严谨的错误处理哲学——通过精细的错误分类拦截，将“新用户注册”、“老用户登录”和“数据库异常”完美分流：
+
+```go
 // 1. 拿着手机号去数据库查人
 user, err := s.userRepo.FindUserByPhone(ctx, phone)
 
@@ -140,14 +142,19 @@ if errors.Is(err, gorm.ErrRecordNotFound) {
     // 3. 拦截真正的系统灾难（如数据库断网、宕机、硬盘满等）
     return result.Fail(&quot;查询用户异常&quot;)
 }
-
 // 4. 如果 err == nil，完美避开 if 拦截，代表是老用户，直接带着装满数据的 user 对象往下走
-3. 数据脱敏与存储：巧用 Hash 结构
+
+
+
+
+###3. 数据脱敏与存储：巧用 Hash 结构
 登录成功后，我们需要将用户信息缓存到 Redis 中，以便后续请求可以实现快速鉴权。
 
 如果直接将对象序列化为 JSON 字符串存入，未来如果用户仅仅想修改一个头像或昵称，都必须把整个 JSON 取出来、反序列化、修改、再重新序列化存入，在大并发下非常消耗 CPU。因此，我们选择 Redis 的 Hash（哈希表） 结构，将其看作一个键值对字典，支持对单个字段进行极轻量级的修改。
 
 在组装 Map 时，包含了一个极其重要的大厂工程避坑点（防止大数精度丢失）：
+
+```go
 // 构建通用的万能复合容器，键为 string，值为任意类型 interface{}
 userMap := map[string]interface{}{
     // 核心细节：数据库的 ID 通常是 int64（如分布式雪花ID）
@@ -161,10 +168,14 @@ userMap := map[string]interface{}{
 // 写入 Redis Hash 结构
 // go-redis 驱动非常智能，允许直接传入 map，它会在底层自动遍历平铺成 HSET 的标准命令格式
 err = s.redisClient.HSet(ctx, tokenKey, userMap).Err()
-4. 鉴权屏障：RefreshToken 中间件
+
+
+###4. 鉴权屏障：RefreshToken 中间件
 为了让用户的登录状态在后续请求中持续生效，同时避免用户频繁掉线，我们引入了 Gin 框架的中间件机制（其作用类似于 Java 中的拦截器拦截请求并挂载 ThreadLocal）。
 
 该中间件的核心思路是：只要请求带了合法的 Token，就帮其刷新 Redis 的过期时间，并将用户信息注入请求上下文（Context），实现链路传递。
+
+```go
 package middleware
 
 import (
@@ -220,7 +231,10 @@ func RefreshTokenMiddleware(redisClient *redis.Client) gin.HandlerFunc {
         c.Next()
     }
 }
+
+
 当中间件把用户塞进上下文后，业务层（如 GET /user/me）只需要通过类型断言，就能极其优雅地把人提出来直接返回，整个过程完全脱离了昂贵的 MySQL 查表，性能表现极佳：
+```go
 // Me 返回当前登录用户
 func (s *userService) Me(ctx context.Context) result.Result {
     // 1. 先将底层的 context 断言还原为 Gin 的原生上下文 *gin.Context
@@ -249,7 +263,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://example.com/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" data-id="cuidnASX7cz51DC7PE2C4pdIj" data-title="Go与Redis实战：实现高并发短信登录与自动注册" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="http://example.com/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" data-id="cuidIUq1eP7KCxPfH_kvMRqji" data-title="Go与Redis实战：实现高并发短信登录与自动注册" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
@@ -302,7 +316,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://example.com/2026/06/20/hello-world/" data-id="cuidfBWcvJ4L0nQfQjunds-3L" data-title="Hello World" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="http://example.com/2026/06/20/hello-world/" data-id="cuidbSzA1irRvIUxluNi7VUQ8" data-title="Hello World" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
