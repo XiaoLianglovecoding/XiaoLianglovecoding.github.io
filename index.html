@@ -77,6 +77,120 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-go-hmdp-blog-like-zset" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/21/go-hmdp-blog-like-zset/" class="article-date">
+  <time class="dt-published" datetime="2026-06-21T08:00:00.000Z" itemprop="datePublished">2026-06-21</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/06/21/go-hmdp-blog-like-zset/">Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>这两天我在 Go 版黑马点评里实现了博客点赞相关功能，包括：</p>
+<ul>
+<li><code>PUT /blog/like/:id</code> 点赞或取消点赞</li>
+<li><code>GET /blog/likes/:id</code> 查询点赞用户 Top5</li>
+<li><code>GET /blog/:id</code> 回填当前用户是否点赞</li>
+<li><code>GET /blog/hot</code> 回填列表中每篇博客的 <code>isLike</code></li>
+<li><code>GET /blog/of/user</code> 区分主页主人和当前访问者</li>
+</ul>
+<p>这篇文章记录点赞功能的流程、关键代码和几个比较容易踩坑的点。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/06/21/go-hmdp-blog-like-zset/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/21/go-hmdp-blog-like-zset/" data-id="cuidWjNl6QwPivJkTpgtLUefy" data-title="Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-go-hmdp-login-token-middleware" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/21/go-hmdp-login-token-middleware/" class="article-date">
+  <time class="dt-published" datetime="2026-06-21T07:00:00.000Z" itemprop="datePublished">2026-06-21</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/06/21/go-hmdp-login-token-middleware/">Go 版黑马点评：登录、Token 与双层拦截器</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>这两天我把 Go 版黑马点评的登录链路从验证码、登录、Token 保存、Token 刷新、登录拦截，到 <code>/user/me</code> 和 <code>/user/logout</code> 基本串了起来。</p>
+<p>这篇文章主要总结登录相关的流程、代码结构和几个容易绕晕的点：</p>
+<ul>
+<li>验证码为什么要放 Redis</li>
+<li>登录后为什么返回 Token</li>
+<li><code>RefreshTokenMiddleware</code> 和 <code>LoginInterceptor</code> 为什么要拆成两层</li>
+<li>Gin 的 <code>Context</code> 怎么保存当前登录用户</li>
+<li><code>/user/me</code> 和 <code>/user/logout</code> 应该怎么设计</li>
+</ul>
+        
+          <p class="article-more-link">
+            <a href="/2026/06/21/go-hmdp-login-token-middleware/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/21/go-hmdp-login-token-middleware/" data-id="cuid4OJFLm3LZR0sV6msC7N5o" data-title="Go 版黑马点评：登录、Token 与双层拦截器" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-Go与Redis实战：实现高并发短信登录与自动注册" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" class="article-date">
@@ -263,7 +377,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://example.com/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" data-id="cuidIUq1eP7KCxPfH_kvMRqji" data-title="Go与Redis实战：实现高并发短信登录与自动注册" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="http://example.com/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" data-id="cuid8_j6ma20anbIxFQs_hyLU" data-title="Go与Redis实战：实现高并发短信登录与自动注册" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
@@ -316,7 +430,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://example.com/2026/06/20/hello-world/" data-id="cuidbSzA1irRvIUxluNi7VUQ8" data-title="Hello World" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="http://example.com/2026/06/20/hello-world/" data-id="cuidI5HL3zE4IzrirRe5Z3PvS" data-title="Hello World" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
@@ -338,7 +452,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
   <div class="widget-wrap">
     <h3 class="widget-title">分类</h3>
     <div class="widget">
-      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%90%8E%E7%AB%AF%E5%BC%80%E5%8F%91%E5%AE%9E%E6%88%98/">后端开发实战</a></li></ul>
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%90%8E%E7%AB%AF%E5%BC%80%E5%8F%91%E5%AE%9E%E6%88%98/">后端开发实战</a></li></ul>
     </div>
   </div>
 
@@ -348,7 +462,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
   <div class="widget-wrap">
     <h3 class="widget-title">标签</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin%E6%A1%86%E6%9E%B6/" rel="tag">Gin框架</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Golang/" rel="tag">Golang</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin%E6%A1%86%E6%9E%B6/" rel="tag">Gin框架</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Golang/" rel="tag">Golang</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li></ul>
     </div>
   </div>
 
@@ -358,7 +472,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
   <div class="widget-wrap">
     <h3 class="widget-title">标签云</h3>
     <div class="widget tagcloud">
-      <a href="/tags/Gin%E6%A1%86%E6%9E%B6/" style="font-size: 10px;">Gin框架</a> <a href="/tags/Golang/" style="font-size: 10px;">Golang</a> <a href="/tags/Redis/" style="font-size: 10px;">Redis</a>
+      <a href="/tags/Gin/" style="font-size: 15px;">Gin</a> <a href="/tags/Gin%E6%A1%86%E6%9E%B6/" style="font-size: 10px;">Gin框架</a> <a href="/tags/Golang/" style="font-size: 10px;">Golang</a> <a href="/tags/Redis/" style="font-size: 20px;">Redis</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a>
     </div>
   </div>
 
@@ -378,6 +492,14 @@ func (s *userService) Me(ctx context.Context) result.Result {
     <h3 class="widget-title">最新文章</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-blog-like-zset/">Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-login-token-middleware/">Go 版黑马点评：登录、Token 与双层拦截器</a>
+          </li>
         
           <li>
             <a href="/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/">Go与Redis实战：实现高并发短信登录与自动注册</a>
