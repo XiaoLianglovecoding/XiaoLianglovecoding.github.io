@@ -4,21 +4,24 @@
   <meta charset="utf-8">
   
   
-  <title>Go与Redis实战：实现高并发短信登录与自动注册 | 我的Golang学习博客</title>
+  <title>Go与Redis实战：从零搭建黑马点评后端到短信登录与自动注册 | 我的Golang学习博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="在传统的 Web 开发中，用户的登录态通常由服务器的 Session 来维护。但在分布式集群环境下，Session 共享会面临诸多痛点。所以，我使用 Go 语言（Gin 框架 + GORM）结合 Redis，完整实现了一套企业级的“短信验证码登录与自动注册”闭环方案。 下面复盘一下核心的架构思路与踩坑点。 1. 为什么验证码要存入 Redis？HTTP 是无状态的，“发送验证码”和“点击登录”是两">
+  <meta name="description" content="这篇文章记录我把黑马点评 Java 后端改造成 Go 后端的前半段过程。 在真正写登录拦截器、点赞、Feed 流这些功能之前，我先完成了这些基础工作：  从零搭建 Go 后端项目骨架 读取 configs&#x2F;config.yaml 连接 MySQL 和 Redis 设计 Handler、Service、Repository 分层 统一前端响应结构 Result 实现店铺分类、店铺列表、店铺详情、优惠">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Go与Redis实战：实现高并发短信登录与自动注册">
+<meta property="og:title" content="Go与Redis实战：从零搭建黑马点评后端到短信登录与自动注册">
 <meta property="og:url" content="http://example.com/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/index.html">
 <meta property="og:site_name" content="我的Golang学习博客">
-<meta property="og:description" content="在传统的 Web 开发中，用户的登录态通常由服务器的 Session 来维护。但在分布式集群环境下，Session 共享会面临诸多痛点。所以，我使用 Go 语言（Gin 框架 + GORM）结合 Redis，完整实现了一套企业级的“短信验证码登录与自动注册”闭环方案。 下面复盘一下核心的架构思路与踩坑点。 1. 为什么验证码要存入 Redis？HTTP 是无状态的，“发送验证码”和“点击登录”是两">
+<meta property="og:description" content="这篇文章记录我把黑马点评 Java 后端改造成 Go 后端的前半段过程。 在真正写登录拦截器、点赞、Feed 流这些功能之前，我先完成了这些基础工作：  从零搭建 Go 后端项目骨架 读取 configs&#x2F;config.yaml 连接 MySQL 和 Redis 设计 Handler、Service、Repository 分层 统一前端响应结构 Result 实现店铺分类、店铺列表、店铺详情、优惠">
 <meta property="og:locale" content="zh_CN">
-<meta property="article:published_time" content="2026-06-20T12:30:00.000Z">
-<meta property="article:modified_time" content="2026-06-20T12:16:52.878Z">
+<meta property="article:published_time" content="2026-06-20T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-22T03:14:28.808Z">
 <meta property="article:author" content="一点甜a">
-<meta property="article:tag" content="Gin框架">
-<meta property="article:tag" content="Golang">
+<meta property="article:tag" content="GORM">
+<meta property="article:tag" content="Gin">
 <meta property="article:tag" content="Redis">
+<meta property="article:tag" content="Viper">
+<meta property="article:tag" content="后端架构">
+<meta property="article:tag" content="短信登录">
 <meta name="twitter:card" content="summary">
   
     <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
@@ -83,11 +86,11 @@
         <section id="main"><article id="post-Go与Redis实战：实现高并发短信登录与自动注册" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" class="article-date">
-  <time class="dt-published" datetime="2026-06-20T12:30:00.000Z" itemprop="datePublished">2026-06-20</time>
+  <time class="dt-published" datetime="2026-06-20T12:00:00.000Z" itemprop="datePublished">2026-06-20</time>
 </a>
     
   <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%90%8E%E7%AB%AF%E5%BC%80%E5%8F%91%E5%AE%9E%E6%88%98/">后端开发实战</a>
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/Redis/">Redis</a>
   </div>
 
   </div>
@@ -98,7 +101,7 @@
         
   
     <h1 class="p-name article-title" itemprop="headline name">
-      Go与Redis实战：实现高并发短信登录与自动注册
+      Go与Redis实战：从零搭建黑马点评后端到短信登录与自动注册
     </h1>
   
 
@@ -106,171 +109,297 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <p>在传统的 Web 开发中，用户的登录态通常由服务器的 Session 来维护。但在分布式集群环境下，Session 共享会面临诸多痛点。所以，我使用 Go 语言（Gin 框架 + GORM）结合 Redis，完整实现了一套企业级的“短信验证码登录与自动注册”闭环方案。</p>
-<p>下面复盘一下核心的架构思路与踩坑点。</p>
-<h3 id="1-为什么验证码要存入-Redis？"><a href="#1-为什么验证码要存入-Redis？" class="headerlink" title="1. 为什么验证码要存入 Redis？"></a>1. 为什么验证码要存入 Redis？</h3><p>HTTP 是无状态的，“发送验证码”和“点击登录”是两次完全独立的网络请求。为了跨请求核对验证码，我们必须找个“储物柜”。</p>
-<p>弃用 MySQL 的原因是因为验证码是“阅后即焚”的垃圾数据，频繁的磁盘 I&#x2F;O 极其拖慢性能；而 Redis 完美契合这一场景，尤其是它的 <strong>TTL（过期时间）</strong> 机制，天然支持“验证码 2 分钟有效”的业务需求。</p>
-<pre><code class="language-go">// 存入 Redis 并设置 2 分钟 TTL，只需接收 error
-err := s.redisClient.Set(ctx, key, code, 2*time.Minute).Err()
-if err != nil {
-    return result.Fail(&quot;验证码保存失败&quot;)
-}
+        <p>这篇文章记录我把黑马点评 Java 后端改造成 Go 后端的前半段过程。</p>
+<p>在真正写登录拦截器、点赞、Feed 流这些功能之前，我先完成了这些基础工作：</p>
+<ul>
+<li>从零搭建 Go 后端项目骨架</li>
+<li>读取 <code>configs/config.yaml</code></li>
+<li>连接 MySQL 和 Redis</li>
+<li>设计 Handler、Service、Repository 分层</li>
+<li>统一前端响应结构 <code>Result</code></li>
+<li>实现店铺分类、店铺列表、店铺详情、优惠券列表、博客详情、用户信息等基础接口</li>
+<li>引入 Redis 完成验证码登录和自动注册的核心流程</li>
+</ul>
+<p>这篇文章更像一次阶段复盘：它不是只讲某一个接口，而是把项目从“空目录”推进到“前端首页和登录链路能跑起来”的全过程串起来。</p>
+<span id="more"></span>
 
-### 2. 核心业务：无感“自动注册”（Find or Create）
-在登录验证通过后，系统需要校验该手机号是否已经是我们的用户。为了提升用户体验，我们采用“自动注册”逻辑：如果数据库中查不到该用户，说明是第一次来的新用户，系统会自动为其创建账号。
+<h2 id="一、为什么要单独写一个-Go-后端"><a href="#一、为什么要单独写一个-Go-后端" class="headerlink" title="一、为什么要单独写一个 Go 后端"></a>一、为什么要单独写一个 Go 后端</h2><p>原来黑马点评项目有 Java 后端代码，但我想用 Go 重新实现一版。</p>
+<p>一开始有两个选择：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">方案一：复制 Java 项目，在里面混写 Go 代码</span><br><span class="line">方案二：新建一个独立 Go 项目，只复用数据库和前端</span><br></pre></td></tr></table></figure>
 
-这里充分体现了 Go 语言严谨的错误处理哲学——通过精细的错误分类拦截，将“新用户注册”、“老用户登录”和“数据库异常”完美分流：
+<p>最后选择了第二种。</p>
+<p>原因很简单：Java 项目保留原样，Go 项目独立演进。这样不会污染原来的 Java 配置，也方便对比 Java 和 Go 的实现方式。</p>
+<p>项目目录大致如下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">Go_hmdianping</span><br><span class="line">├── cmd</span><br><span class="line">│   └── server</span><br><span class="line">│       └── main.go</span><br><span class="line">├── configs</span><br><span class="line">│   └── config.yaml</span><br><span class="line">├── internal</span><br><span class="line">│   ├── config</span><br><span class="line">│   ├── router</span><br><span class="line">│   ├── middleware</span><br><span class="line">│   ├── handler</span><br><span class="line">│   ├── service</span><br><span class="line">│   ├── repository</span><br><span class="line">│   ├── model</span><br><span class="line">│   ├── dto</span><br><span class="line">│   └── pkg</span><br><span class="line">│       ├── result</span><br><span class="line">│       ├── constants</span><br><span class="line">│       └── userutils</span><br><span class="line">├── go.mod</span><br><span class="line">└── go.sum</span><br></pre></td></tr></table></figure>
 
-```go
-// 1. 拿着手机号去数据库查人
-user, err := s.userRepo.FindUserByPhone(ctx, phone)
+<p>Go 项目里我使用了几个核心依赖：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Gin：HTTP 路由和 Handler</span><br><span class="line">GORM：操作 MySQL</span><br><span class="line">go-redis：操作 Redis</span><br><span class="line">Viper：读取配置文件</span><br></pre></td></tr></table></figure>
 
-// 2. 精准拦截：这个错误是不是因为“找不到记录”引起的？
-if errors.Is(err, gorm.ErrRecordNotFound) {
-    // 如果是，说明是新用户，在内存中组装新用户对象
-    user = &amp;model.User{
-        Phone:    phone,
-        // 利用 UUID 随机生成一个默认昵称，切片截取前 8 位以防过长
-        NickName: &quot;user_&quot; + uuid.New().String()[:8], 
-    }
-    
-    // 执行 INSERT 插入数据库
-    // 此时 GORM 会自动填充嵌套的创建/更新时间戳，未赋值的字段会自动落入 MySQL 的“零值”
-    createErr := s.userRepo.CreateUser(ctx, user)
-    if createErr != nil {
-        return result.Fail(&quot;创建新用户失败&quot;)
-    }
-    
-} else if err != nil {
-    // 3. 拦截真正的系统灾难（如数据库断网、宕机、硬盘满等）
-    return result.Fail(&quot;查询用户异常&quot;)
-}
-// 4. 如果 err == nil，完美避开 if 拦截，代表是老用户，直接带着装满数据的 user 对象往下走
+<h2 id="二、Go-后端的分层设计"><a href="#二、Go-后端的分层设计" class="headerlink" title="二、Go 后端的分层设计"></a>二、Go 后端的分层设计</h2><p>为了让项目不乱，我一开始就按类似 Java Spring 的思路拆层。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">Handler     对应 Java Controller，负责接收请求和返回响应</span><br><span class="line">Service     对应 Java Service，负责业务逻辑</span><br><span class="line">Repository  对应 Java Mapper/DAO，负责数据库查询</span><br><span class="line">Model       对应数据库表实体</span><br><span class="line">DTO         对应前后端传输对象</span><br><span class="line">Router      统一注册所有路由</span><br><span class="line">Config      读取配置和初始化连接</span><br><span class="line">Result      统一返回格式</span><br></pre></td></tr></table></figure>
 
+<p>请求从前端进来后的调用链是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Gin Router</span><br><span class="line">  -&gt; Handler</span><br><span class="line">  -&gt; Service</span><br><span class="line">  -&gt; Repository</span><br><span class="line">  -&gt; MySQL / Redis</span><br></pre></td></tr></table></figure>
 
+<p>这个分层一开始看起来啰嗦，但后面写登录、点赞、优惠券时就很舒服：每一层只做自己的事。</p>
+<h2 id="三、配置文件：configs-config-yaml"><a href="#三、配置文件：configs-config-yaml" class="headerlink" title="三、配置文件：configs&#x2F;config.yaml"></a>三、配置文件：configs&#x2F;config.yaml</h2><p>Go 服务监听 8081，这样前端 nginx 代理 <code>/api</code> 到后端时不用大改。</p>
+<p>配置文件如下：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">server:</span></span><br><span class="line">  <span class="attr">port:</span> <span class="number">8081</span></span><br><span class="line"></span><br><span class="line"><span class="attr">mysql:</span></span><br><span class="line">  <span class="attr">host:</span> <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span></span><br><span class="line">  <span class="attr">port:</span> <span class="number">3306</span></span><br><span class="line">  <span class="attr">database:</span> <span class="string">hm-dianping</span></span><br><span class="line">  <span class="attr">username:</span> <span class="string">root</span></span><br><span class="line">  <span class="attr">password:</span> <span class="number">123456</span></span><br><span class="line"></span><br><span class="line"><span class="attr">redis:</span></span><br><span class="line">  <span class="attr">host:</span> <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span></span><br><span class="line">  <span class="attr">port:</span> <span class="number">6379</span></span><br><span class="line">  <span class="attr">password:</span> <span class="number">123456</span></span><br><span class="line">  <span class="attr">database:</span> <span class="number">1</span></span><br></pre></td></tr></table></figure>
 
+<p>这一步的重点是：不要把数据库连接信息散落在代码里，统一放配置文件。</p>
+<h2 id="四、读取配置：Viper"><a href="#四、读取配置：Viper" class="headerlink" title="四、读取配置：Viper"></a>四、读取配置：Viper</h2><p>我用 Viper 读取 YAML，并映射到 Go 结构体。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Config <span class="keyword">struct</span> &#123;</span><br><span class="line">    Server ServerConfig <span class="string">`mapstructure:&quot;server&quot;`</span></span><br><span class="line">    MySQL  MySQLConfig  <span class="string">`mapstructure:&quot;mysql&quot;`</span></span><br><span class="line">    Redis  RedisConfig  <span class="string">`mapstructure:&quot;redis&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> ServerConfig <span class="keyword">struct</span> &#123;</span><br><span class="line">    Port <span class="type">int</span> <span class="string">`mapstructure:&quot;port&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> MySQLConfig <span class="keyword">struct</span> &#123;</span><br><span class="line">    Host     <span class="type">string</span> <span class="string">`mapstructure:&quot;host&quot;`</span></span><br><span class="line">    Port     <span class="type">int</span>    <span class="string">`mapstructure:&quot;port&quot;`</span></span><br><span class="line">    Database <span class="type">string</span> <span class="string">`mapstructure:&quot;database&quot;`</span></span><br><span class="line">    Username <span class="type">string</span> <span class="string">`mapstructure:&quot;username&quot;`</span></span><br><span class="line">    Password <span class="type">string</span> <span class="string">`mapstructure:&quot;password&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> RedisConfig <span class="keyword">struct</span> &#123;</span><br><span class="line">    Host     <span class="type">string</span> <span class="string">`mapstructure:&quot;host&quot;`</span></span><br><span class="line">    Port     <span class="type">int</span>    <span class="string">`mapstructure:&quot;port&quot;`</span></span><br><span class="line">    Password <span class="type">string</span> <span class="string">`mapstructure:&quot;password&quot;`</span></span><br><span class="line">    Database <span class="type">int</span>    <span class="string">`mapstructure:&quot;database&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-###3. 数据脱敏与存储：巧用 Hash 结构
-登录成功后，我们需要将用户信息缓存到 Redis 中，以便后续请求可以实现快速鉴权。
+<p>读取函数：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">Load</span><span class="params">(path <span class="type">string</span>)</span></span> (*Config, <span class="type">error</span>) &#123;</span><br><span class="line">    v := viper.New()</span><br><span class="line">    v.SetConfigFile(path)</span><br><span class="line">    v.SetConfigType(<span class="string">&quot;yaml&quot;</span>)</span><br><span class="line"></span><br><span class="line">    v.SetEnvKeyReplacer(strings.NewReplacer(<span class="string">&quot;.&quot;</span>, <span class="string">&quot;_&quot;</span>))</span><br><span class="line">    v.AutomaticEnv()</span><br><span class="line"></span><br><span class="line">    v.SetDefault(<span class="string">&quot;server.port&quot;</span>, <span class="number">8081</span>)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err := v.ReadInConfig(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, fmt.Errorf(<span class="string">&quot;read config: %w&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">var</span> cfg Config</span><br><span class="line">    <span class="keyword">if</span> err := v.Unmarshal(&amp;cfg); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, fmt.Errorf(<span class="string">&quot;unmarshal config: %w&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> &amp;cfg, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-如果直接将对象序列化为 JSON 字符串存入，未来如果用户仅仅想修改一个头像或昵称，都必须把整个 JSON 取出来、反序列化、修改、再重新序列化存入，在大并发下非常消耗 CPU。因此，我们选择 Redis 的 Hash（哈希表） 结构，将其看作一个键值对字典，支持对单个字段进行极轻量级的修改。
+<p>这里有两个我觉得很有价值的点：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">1. 用结构体承接配置，比到处 v.GetString 更清晰</span><br><span class="line">2. 用 fmt.Errorf(&quot;xxx: %w&quot;, err) 保留原始错误，方便排查</span><br></pre></td></tr></table></figure>
 
-在组装 Map 时，包含了一个极其重要的大厂工程避坑点（防止大数精度丢失）：
+<h2 id="五、连接-MySQL：拼接-DSN"><a href="#五、连接-MySQL：拼接-DSN" class="headerlink" title="五、连接 MySQL：拼接 DSN"></a>五、连接 MySQL：拼接 DSN</h2><p>GORM 连接 MySQL 时需要 DSN。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">OpenMySQL</span><span class="params">(cfg MySQLConfig)</span></span> (*gorm.DB, <span class="type">error</span>) &#123;</span><br><span class="line">    dsn := fmt.Sprintf(</span><br><span class="line">        <span class="string">&quot;%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&amp;parseTime=True&amp;loc=Local&quot;</span>,</span><br><span class="line">        cfg.Username,</span><br><span class="line">        cfg.Password,</span><br><span class="line">        cfg.Host,</span><br><span class="line">        cfg.Port,</span><br><span class="line">        cfg.Database,</span><br><span class="line">    )</span><br><span class="line"></span><br><span class="line">    db, err := gorm.Open(mysql.Open(dsn), &amp;gorm.Config&#123;&#125;)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, fmt.Errorf(<span class="string">&quot;open mysql: %w&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> db, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-```go
-// 构建通用的万能复合容器，键为 string，值为任意类型 interface{}
-userMap := map[string]interface{}{
-    // 核心细节：数据库的 ID 通常是 int64（如分布式雪花ID）
-    // JavaScript/前端在解析超过 15 位的超大数字时会出现精度丢失（最后几位变0）
-    // 后端统一通过 strconv 强转为十进制字符串，是最安全、规范的工业做法
-    &quot;id&quot;:       strconv.FormatInt(user.ID, 10), 
-    &quot;nickName&quot;: user.NickName,
-    &quot;icon&quot;:     user.Icon,
-}
+<p>DSN 的格式可以拆开理解：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">用户名:密码@tcp(主机:端口)/数据库名?参数</span><br></pre></td></tr></table></figure>
 
-// 写入 Redis Hash 结构
-// go-redis 驱动非常智能，允许直接传入 map，它会在底层自动遍历平铺成 HSET 的标准命令格式
-err = s.redisClient.HSet(ctx, tokenKey, userMap).Err()
+<p>其中：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">charset=utf8mb4     支持 emoji 和完整 UTF-8</span><br><span class="line">parseTime=True      让 DATETIME/TIMESTAMP 能解析成 time.Time</span><br><span class="line">loc=Local           使用本地时区</span><br></pre></td></tr></table></figure>
 
+<h2 id="六、main-go：组装整个后端"><a href="#六、main-go：组装整个后端" class="headerlink" title="六、main.go：组装整个后端"></a>六、main.go：组装整个后端</h2><p>程序入口在 <code>cmd/server/main.go</code>。</p>
+<p>核心流程是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">1. 读取配置</span><br><span class="line">2. 打开 MySQL</span><br><span class="line">3. 创建 Redis 客户端</span><br><span class="line">4. 创建 Repository</span><br><span class="line">5. 创建 Service</span><br><span class="line">6. 创建 Handler</span><br><span class="line">7. 注册 Router</span><br><span class="line">8. 启动 Gin 服务</span><br></pre></td></tr></table></figure>
 
-###4. 鉴权屏障：RefreshToken 中间件
-为了让用户的登录状态在后续请求中持续生效，同时避免用户频繁掉线，我们引入了 Gin 框架的中间件机制（其作用类似于 Java 中的拦截器拦截请求并挂载 ThreadLocal）。
+<p>代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">    cfg, err := config.Load(<span class="string">&quot;configs/config.yaml&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatalf(<span class="string">&quot;load config: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    db, err := config.OpenMySQL(cfg.MySQL)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatalf(<span class="string">&quot;open mysql: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    redisClient := redis.NewClient(&amp;redis.Options&#123;</span><br><span class="line">        Addr:     fmt.Sprintf(<span class="string">&quot;%s:%d&quot;</span>, cfg.Redis.Host, cfg.Redis.Port),</span><br><span class="line">        Password: cfg.Redis.Password,</span><br><span class="line">        DB:       cfg.Redis.Database,</span><br><span class="line">    &#125;)</span><br><span class="line"></span><br><span class="line">    repos := repository.NewRepositories(db)</span><br><span class="line">    services := service.NewServices(repos, redisClient)</span><br><span class="line">    handlers := handler.NewHandlers(services)</span><br><span class="line">    engine := router.NewRouter(handlers, redisClient)</span><br><span class="line"></span><br><span class="line">    addr := fmt.Sprintf(<span class="string">&quot;:%d&quot;</span>, cfg.Server.Port)</span><br><span class="line">    log.Printf(<span class="string">&quot;hmdp-go server started on %s&quot;</span>, addr)</span><br><span class="line">    <span class="keyword">if</span> err := engine.Run(addr); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatalf(<span class="string">&quot;run server: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-该中间件的核心思路是：只要请求带了合法的 Token，就帮其刷新 Redis 的过期时间，并将用户信息注入请求上下文（Context），实现链路传递。
+<p>这里我开始真正理解 Go 后端的“依赖组装”：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Repository 依赖 db</span><br><span class="line">Service 依赖 Repository 和 Redis</span><br><span class="line">Handler 依赖 Service</span><br><span class="line">Router 依赖 Handler 和 Middleware</span><br></pre></td></tr></table></figure>
 
-```go
-package middleware
+<p>和 Java Spring 自动注入不同，Go 里通常是自己显式组装依赖。</p>
+<h2 id="七、统一返回格式-Result"><a href="#七、统一返回格式-Result" class="headerlink" title="七、统一返回格式 Result"></a>七、统一返回格式 Result</h2><p>黑马点评前端会根据 <code>success</code> 字段判断请求是否成功。</p>
+<p>所以 Go 后端也要对齐 Java 版返回结构：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="string">&quot;&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
 
-import (
-    &quot;time&quot;
-    &quot;strconv&quot;
-    &quot;[github.com/gin-gonic/gin](https://github.com/gin-gonic/gin)&quot;
-    &quot;[github.com/redis/go-redis/v9](https://github.com/redis/go-redis/v9)&quot;
-    &quot;go-hmdianping/internal/pkg/constants&quot; // 替换为你真实的常量包路径
-    &quot;go-hmdianping/internal/dto&quot;
-)
+<p>Go 代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Result <span class="keyword">struct</span> &#123;</span><br><span class="line">    Success  <span class="type">bool</span>   <span class="string">`json:&quot;success&quot;`</span></span><br><span class="line">    ErrorMsg <span class="type">string</span> <span class="string">`json:&quot;errorMsg&quot;`</span></span><br><span class="line">    Data     any    <span class="string">`json:&quot;data&quot;`</span></span><br><span class="line">    Total    *<span class="type">int64</span> <span class="string">`json:&quot;total&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">OK</span><span class="params">()</span></span> Result &#123;</span><br><span class="line">    <span class="keyword">return</span> Result&#123;Success: <span class="literal">true</span>&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">OKWithData</span><span class="params">(data any)</span></span> Result &#123;</span><br><span class="line">    <span class="keyword">return</span> Result&#123;Success: <span class="literal">true</span>, Data: data&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">OKWithList</span><span class="params">(data any, total <span class="type">int64</span>)</span></span> Result &#123;</span><br><span class="line">    <span class="keyword">return</span> Result&#123;Success: <span class="literal">true</span>, Data: data, Total: &amp;total&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">Fail</span><span class="params">(message <span class="type">string</span>)</span></span> Result &#123;</span><br><span class="line">    <span class="keyword">return</span> Result&#123;Success: <span class="literal">false</span>, ErrorMsg: message&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-// RefreshTokenMiddleware 是 Token 刷新中间件
-// 通过闭包机制将服务启动时初始化的 redisClient 注入进来
-func RefreshTokenMiddleware(redisClient *redis.Client) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        // 1. 从 HTTP 请求头中尝试读取 Token
-        token := c.GetHeader(&quot;authorization&quot;)
-        if token == &quot;&quot; {
-            // 如果没有 token，说明是未登录的游客，直接放行
-            c.Next()
-            return
-        }
+<p>这个统一结构非常重要。</p>
+<p>如果直接返回任意 JSON，前端 axios 拦截器可能无法识别，就会出现“后端有数据但前端不显示”的情况。</p>
+<h2 id="八、第一条真正打通的接口：店铺分类"><a href="#八、第一条真正打通的接口：店铺分类" class="headerlink" title="八、第一条真正打通的接口：店铺分类"></a>八、第一条真正打通的接口：店铺分类</h2><p>前端首页最先请求的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop-type/list</span><br></pre></td></tr></table></figure>
 
-        // 2. 拼接 Redis Key
-        key := constants.LoginUserKey + token
+<p>这个接口负责展示首页顶部的分类图标。</p>
+<p>Repository 层：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopTypeRepository)</span></span> FindShopTypes(ctx context.Context) ([]model.ShopType, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> shopTypes []model.ShopType</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Order(<span class="string">&quot;sort ASC&quot;</span>).</span><br><span class="line">        Find(&amp;shopTypes).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> shopTypes, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-        // 3. 一把捞出 Redis Hash 中的所有键值对
-        // 注意：go-redis 的 HGetAll 当 key 不存在时会返回空 map 而不报 redis.Nil 错，非常友好
-        userMap, err := redisClient.HGetAll(c, key).Result()
-        if err != nil || len(userMap) == 0 {
-            // 查不到数据，说明 token 已过期或伪造，直接放行
-            c.Next()
-            return
-        }
+<p>Service 层：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopTypeService)</span></span> List(ctx context.Context) result.Result &#123;</span><br><span class="line">    shopTypes, err := s.shopTypeRepo.FindShopTypes(ctx)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop type failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shopTypes)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-        // 4. 将查出来的字符串 Map 反向解析并还原为特定的数据传输对象 (UserDTO)
-        id, _ := strconv.ParseInt(userMap[&quot;id&quot;], 10, 64) // 将字符串 ID 还原回 int64
-        userDTO := dto.UserDTO{
-            ID:       id,
-            NickName: userMap[&quot;nickName&quot;],
-            Icon:     userMap[&quot;icon&quot;],
-        }
+<p>这个接口让我把三层调用跑通了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Handler -&gt; Service -&gt; Repository -&gt; MySQL -&gt; Result -&gt; 前端</span><br></pre></td></tr></table></figure>
 
-        // 5. 【核心魔法】将对象塞进 Gin 的 Context 上下文中
-        // 这样整个请求生命周期内的后续 Handler 和 Service 都可以直接无感读取
-        c.Set(&quot;user&quot;, userDTO)
+<p>当浏览器访问：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop-type/list</span><br></pre></td></tr></table></figure>
 
-        // 6. 只要用户持续在操作系统，就为其 Token 续命（例如延长 30 分钟）
-        ttl := time.Duration(constants.LoginUserTTLMinutes) * time.Minute
-        redisClient.Expire(c, key, ttl)
+<p>能看到分类数据返回时，说明 Go 后端已经真正接上数据库了。</p>
+<h2 id="九、店铺列表与店铺详情"><a href="#九、店铺列表与店铺详情" class="headerlink" title="九、店铺列表与店铺详情"></a>九、店铺列表与店铺详情</h2><p>前端点击分类后，会请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/of/type?typeId=1&amp;current=1</span><br><span class="line">GET /shop/of/name?name=KTV&amp;current=1</span><br><span class="line">GET /shop/:id</span><br></pre></td></tr></table></figure>
 
-        // 7. 放行，流转到下一站
-        c.Next()
-    }
-}
+<p>Repository 层负责写查询：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopRepository)</span></span> FindShopByID(ctx context.Context, id <span class="type">int64</span>) (*model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> shop model.Shop</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Where(<span class="string">&quot;id = ?&quot;</span>, id).</span><br><span class="line">        First(&amp;shop).Error</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> &amp;shop, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
+<p>分类分页查询：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopRepository)</span></span> FindShopsByType(ctx context.Context, typeID <span class="type">int64</span>, current <span class="type">int</span>) ([]model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> shops []model.Shop</span><br><span class="line"></span><br><span class="line">    <span class="keyword">const</span> pageSize = <span class="number">5</span></span><br><span class="line">    <span class="keyword">if</span> current &lt; <span class="number">1</span> &#123;</span><br><span class="line">        current = <span class="number">1</span></span><br><span class="line">    &#125;</span><br><span class="line">    offset := (current - <span class="number">1</span>) * pageSize</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Where(<span class="string">&quot;type_id = ?&quot;</span>, typeID).</span><br><span class="line">        Offset(offset).</span><br><span class="line">        Limit(pageSize).</span><br><span class="line">        Find(&amp;shops).Error</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> shops, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-当中间件把用户塞进上下文后，业务层（如 GET /user/me）只需要通过类型断言，就能极其优雅地把人提出来直接返回，整个过程完全脱离了昂贵的 MySQL 查表，性能表现极佳：
-```go
-// Me 返回当前登录用户
-func (s *userService) Me(ctx context.Context) result.Result {
-    // 1. 先将底层的 context 断言还原为 Gin 的原生上下文 *gin.Context
-    ginCtx, ok := ctx.(*gin.Context)
-    if !ok {
-        return result.Fail(&quot;系统异常：无法获取请求上下文&quot;)
-    }
+<p>名称搜索：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopRepository)</span></span> FindShopsByName(ctx context.Context, name <span class="type">string</span>, current <span class="type">int</span>) ([]model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> shops []model.Shop</span><br><span class="line"></span><br><span class="line">    <span class="keyword">const</span> pageSize = <span class="number">10</span></span><br><span class="line">    <span class="keyword">if</span> current &lt; <span class="number">1</span> &#123;</span><br><span class="line">        current = <span class="number">1</span></span><br><span class="line">    &#125;</span><br><span class="line">    offset := (current - <span class="number">1</span>) * pageSize</span><br><span class="line"></span><br><span class="line">    query := r.db.WithContext(ctx).Model(&amp;model.Shop&#123;&#125;)</span><br><span class="line">    <span class="keyword">if</span> name != <span class="string">&quot;&quot;</span> &#123;</span><br><span class="line">        query = query.Where(<span class="string">&quot;name LIKE ?&quot;</span>, <span class="string">&quot;%&quot;</span>+name+<span class="string">&quot;%&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    err := query.Offset(offset).Limit(pageSize).Find(&amp;shops).Error</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> shops, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-    // 2. 尝试从上下文中取出 &quot;user&quot;
-    userObj, exists := ginCtx.Get(&quot;user&quot;)
-    if !exists {
-        return result.Fail(&quot;用户未登录&quot;)
-    }
+<p>Service 层做参数校验和结果包装：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> QueryByID(ctx context.Context, id <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> id &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid shop id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    shop, err := s.shopRepo.FindShopByID(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shop)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> QueryByType(ctx context.Context, typeID <span class="type">int64</span>, current <span class="type">int</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> typeID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid typeID&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    shops, err := s.shopRepo.FindShopsByType(ctx, typeID, current)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop by type failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shops)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> QueryByName(ctx context.Context, name <span class="type">string</span>, current <span class="type">int</span>) result.Result &#123;</span><br><span class="line">    shops, err := s.shopRepo.FindShopsByName(ctx, name, current)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop by name failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shops)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-    // 3. 再次进行类型断言，将空接口转换为具体实体的 DTO 类型
-    userDTO, ok := userObj.(dto.UserDTO)
-    if !ok {
-        return result.Fail(&quot;用户信息解析异常&quot;)
-    }
+<p>这部分主要学习了 GORM 的几个基础能力：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Where 条件查询</span><br><span class="line">LIKE 模糊查询</span><br><span class="line">Offset + Limit 分页</span><br><span class="line">First 查询单条</span><br><span class="line">Find 查询列表</span><br></pre></td></tr></table></figure>
 
-    // 4. 成功拿到，直接包装返回
-    return result.OKWithData(userDTO)
-}
-</code></pre>
+<h2 id="十、优惠券列表：Preload-预加载"><a href="#十、优惠券列表：Preload-预加载" class="headerlink" title="十、优惠券列表：Preload 预加载"></a>十、优惠券列表：Preload 预加载</h2><p>店铺详情页会展示优惠券列表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /voucher/list/:shopId</span><br></pre></td></tr></table></figure>
+
+<p>优惠券数据在两张表里：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">tb_voucher：优惠券基础信息</span><br><span class="line">tb_seckill_voucher：秒杀券库存、开始时间、结束时间</span><br></pre></td></tr></table></figure>
+
+<p>为了把两张表的数据组装到一起，我用了 GORM 的 <code>Preload</code>。</p>
+<p>Repository 层：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *voucherRepository)</span></span> FindVouchersByShopID(ctx context.Context, shopID <span class="type">int64</span>) ([]model.Voucher, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> vouchers []model.Voucher</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Preload(<span class="string">&quot;SeckillVoucher&quot;</span>).</span><br><span class="line">        Where(<span class="string">&quot;shop_id = ?&quot;</span>, shopID).</span><br><span class="line">        Find(&amp;vouchers).Error</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> vouchers, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Service 层把秒杀券信息拍平，方便前端使用：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherService)</span></span> QueryVoucherOfShop(ctx context.Context, shopID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> shopID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid shop id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    vouchers, err := s.voucherRepo.FindVouchersByShopID(ctx, shopID)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query voucher of shop failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> i := <span class="keyword">range</span> vouchers &#123;</span><br><span class="line">        <span class="keyword">if</span> vouchers[i].SeckillVoucher != <span class="literal">nil</span> &#123;</span><br><span class="line">            vouchers[i].Stock = vouchers[i].SeckillVoucher.Stock</span><br><span class="line">            vouchers[i].BeginTime = &amp;vouchers[i].SeckillVoucher.BeginTime</span><br><span class="line">            vouchers[i].EndTime = &amp;vouchers[i].SeckillVoucher.EndTime</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(vouchers)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的重点是：数据库表结构不一定等于前端需要的 JSON 结构。Service 层可以做适度的数据组装。</p>
+<h2 id="十一、博客详情和热门博客"><a href="#十一、博客详情和热门博客" class="headerlink" title="十一、博客详情和热门博客"></a>十一、博客详情和热门博客</h2><p>首页热门博客接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /blog/hot?current=1</span><br></pre></td></tr></table></figure>
+
+<p>博客详情接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /blog/:id</span><br></pre></td></tr></table></figure>
+
+<p>博客表 <code>tb_blog</code> 里只有 <code>user_id</code>，但是前端需要作者昵称和头像，所以要再查用户表，把 <code>name</code> 和 <code>icon</code> 填回 Blog。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *blogService)</span></span> QueryByID(ctx context.Context, blogID <span class="type">int64</span>, viewerID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> blogID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid blog id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    blog, err := s.blogRepo.FindBlogByID(ctx, blogID)</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;blog not found&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query blog failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    user, err := s.userRepo.FindUserByID(ctx, blog.UserID)</span><br><span class="line">    <span class="keyword">if</span> err == <span class="literal">nil</span> &#123;</span><br><span class="line">        blog.Name = user.NickName</span><br><span class="line">        blog.Icon = user.Icon</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(blog)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>热门博客列表类似，只是循环处理每条博客：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *blogService)</span></span> QueryHotBlog(ctx context.Context, current <span class="type">int</span>, viewerID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    blogs, err := s.blogRepo.FindBlogsByHot(ctx, current)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query hot blog failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> i := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">        user, err := s.userRepo.FindUserByID(ctx, blogs[i].UserID)</span><br><span class="line">        <span class="keyword">if</span> err == <span class="literal">nil</span> &#123;</span><br><span class="line">            blogs[i].Name = user.NickName</span><br><span class="line">            blogs[i].Icon = user.Icon</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(blogs)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里学到一个 Go 语言细节：如果要修改切片里的元素，应该用下标遍历。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">    blogs[i].Name = <span class="string">&quot;xxx&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>如果写成：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> _, blog := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">    blog.Name = <span class="string">&quot;xxx&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>修改的是副本，不会影响原切片。</p>
+<h2 id="十二、用户基础信息接口"><a href="#十二、用户基础信息接口" class="headerlink" title="十二、用户基础信息接口"></a>十二、用户基础信息接口</h2><p>用户主页需要两个接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">GET /user/:id</span><br><span class="line">GET /user/info/:id</span><br></pre></td></tr></table></figure>
+
+<p>第一个返回用户基本信息：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *userService)</span></span> QueryUserByID(ctx context.Context, id <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> id &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid user id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    user, err := s.userRepo.FindUserByID(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;user not found&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query user failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    userDTO := dto.UserDTO&#123;</span><br><span class="line">        ID:       user.ID,</span><br><span class="line">        NickName: user.NickName,</span><br><span class="line">        Icon:     user.Icon,</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(userDTO)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>第二个返回用户扩展资料：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *userService)</span></span> QueryUserInfo(ctx context.Context, id <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> id &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid user id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    info, err := s.userRepo.FindUserInfoByID(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.OKWithData(&amp;model.UserInfo&#123;&#125;)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query user info failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    infoDTO := &amp;dto.UserInfoDTO&#123;</span><br><span class="line">        City:      info.City,</span><br><span class="line">        Introduce: info.Introduce,</span><br><span class="line">        Fans:      info.Fans,</span><br><span class="line">        Followee:  info.Followee,</span><br><span class="line">        Gender:    info.Gender,</span><br><span class="line">        Credits:   info.Credits,</span><br><span class="line">        Level:     info.Level,</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> info.Birthday != <span class="literal">nil</span> &#123;</span><br><span class="line">        infoDTO.Birthday = info.Birthday.Format(<span class="string">&quot;2006-01-02&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(infoDTO)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的重点是 DTO。</p>
+<p>数据库里的用户表可能有手机号、密码等敏感字段，不能直接把 model 返回给前端。所以要转换成 <code>UserDTO</code>。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> UserDTO <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID       <span class="type">int64</span>  <span class="string">`json:&quot;id&quot;`</span></span><br><span class="line">    NickName <span class="type">string</span> <span class="string">`json:&quot;nickName&quot;`</span></span><br><span class="line">    Icon     <span class="type">string</span> <span class="string">`json:&quot;icon&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="十三、进入短信登录：Redis-的第一次核心应用"><a href="#十三、进入短信登录：Redis-的第一次核心应用" class="headerlink" title="十三、进入短信登录：Redis 的第一次核心应用"></a>十三、进入短信登录：Redis 的第一次核心应用</h2><p>基础接口打通后，真正开始使用 Redis 的地方就是短信登录。</p>
+<p>登录流程如下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">1. 用户输入手机号</span><br><span class="line">2. 后端生成验证码</span><br><span class="line">3. 验证码保存到 Redis，并设置 2 分钟过期</span><br><span class="line">4. 用户提交手机号和验证码</span><br><span class="line">5. 后端从 Redis 读取验证码并校验</span><br><span class="line">6. 校验成功后查询用户</span><br><span class="line">7. 用户不存在则自动注册</span><br><span class="line">8. 生成 token</span><br><span class="line">9. 将 UserDTO 保存到 Redis Hash</span><br><span class="line">10. 返回 token 给前端</span><br></pre></td></tr></table></figure>
+
+<p>这就是“短信登录 + 自动注册”。</p>
+<h2 id="十四、验证码发送接口"><a href="#十四、验证码发送接口" class="headerlink" title="十四、验证码发送接口"></a>十四、验证码发送接口</h2><p>验证码发送接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">POST /user/code?phone=xxx</span><br></pre></td></tr></table></figure>
+
+<p>核心代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *userService)</span></span> SendCode(ctx context.Context, phone <span class="type">string</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">len</span>(phone) == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;phone is empty&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    r := rand.New(rand.NewSource(time.Now().UnixNano()))</span><br><span class="line">    code := fmt.Sprintf(<span class="string">&quot;%06d&quot;</span>, r.Int31n(<span class="number">1000000</span>))</span><br><span class="line"></span><br><span class="line">    key := constants.LoginCodeKey + phone</span><br><span class="line">    ttl := time.Duration(constants.LoginCodeTTLMinutes) * time.Minute</span><br><span class="line"></span><br><span class="line">    err := s.redisClient.Set(ctx, key, code, ttl).Err()</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;send code failed, please try later&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    fmt.Printf(<span class="string">&quot;验证码：%s\n&quot;</span>, code)</span><br><span class="line">    <span class="keyword">return</span> result.OK()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Redis 中的数据大概是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">key   = login:code:13800138000</span><br><span class="line">value = 836421</span><br><span class="line">ttl   = 2 minutes</span><br></pre></td></tr></table></figure>
+
+<p>验证码不需要进 MySQL，因为它只是一段短期有效的临时状态。</p>
+<h2 id="十五、登录接口：校验验证码"><a href="#十五、登录接口：校验验证码" class="headerlink" title="十五、登录接口：校验验证码"></a>十五、登录接口：校验验证码</h2><p>登录接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">POST /user/login</span><br></pre></td></tr></table></figure>
+
+<p>前端提交 JSON：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;phone&quot;</span><span class="punctuation">:</span> <span class="string">&quot;13800138000&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;code&quot;</span><span class="punctuation">:</span> <span class="string">&quot;836421&quot;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>第一步是校验验证码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">codeKey := constants.LoginCodeKey + phone</span><br><span class="line">redisCode, err := s.redisClient.Get(ctx, codeKey).Result()</span><br><span class="line"><span class="keyword">if</span> errors.Is(err, redis.Nil) &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;验证码已过期或不存在&quot;</span>)</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;系统异常&quot;</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> code != redisCode &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;验证码错误&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里要区分两个错误：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">redis.Nil：key 不存在，也就是验证码过期或没发送</span><br><span class="line">其他 err：Redis 真的出问题了</span><br></pre></td></tr></table></figure>
+
+<p>这也是 Go 里错误处理的一个重点：不能只写 <code>if err != nil</code>，有时候要判断具体是什么错误。</p>
+<h2 id="十六、自动注册"><a href="#十六、自动注册" class="headerlink" title="十六、自动注册"></a>十六、自动注册</h2><p>验证码通过后，根据手机号查询用户：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">user, err := s.userRepo.FindUserByPhone(ctx, phone)</span><br><span class="line"><span class="keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) &#123;</span><br><span class="line">    user = &amp;model.User&#123;</span><br><span class="line">        Phone:    phone,</span><br><span class="line">        NickName: <span class="string">&quot;user_&quot;</span> + uuid.New().String()[:<span class="number">8</span>],</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err := s.userRepo.CreateUser(ctx, user); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;创建新用户失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">&#125; <span class="keyword">else</span> <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;查询用户异常&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这就是自动注册：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">查到用户：直接登录</span><br><span class="line">查不到用户：创建用户，再登录</span><br></pre></td></tr></table></figure>
+
+<p>默认昵称使用：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;user_&quot;</span> + uuid.New().String()[:<span class="number">8</span>]</span><br></pre></td></tr></table></figure>
+
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">user_a3f9c21b</span><br></pre></td></tr></table></figure>
+
+<h2 id="十七、生成-token-并保存登录态"><a href="#十七、生成-token-并保存登录态" class="headerlink" title="十七、生成 token 并保存登录态"></a>十七、生成 token 并保存登录态</h2><p>登录成功后，后端生成一个 token：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">token := uuid.New().String()</span><br></pre></td></tr></table></figure>
+
+<p>然后把用户信息存入 Redis Hash：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">tokenKey := constants.LoginUserKey + token</span><br><span class="line"></span><br><span class="line">userMap := <span class="keyword">map</span>[<span class="type">string</span>]<span class="keyword">interface</span>&#123;&#125;&#123;</span><br><span class="line">    <span class="string">&quot;id&quot;</span>:       strconv.FormatInt(user.ID, <span class="number">10</span>),</span><br><span class="line">    <span class="string">&quot;nickName&quot;</span>: user.NickName,</span><br><span class="line">    <span class="string">&quot;icon&quot;</span>:     user.Icon,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> err := s.redisClient.HMSet(ctx, tokenKey, userMap).Err(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;保存登录状态失败&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Redis 里的结构大概是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">key = login:token:token字符串</span><br><span class="line">hash fields:</span><br><span class="line">  id       = 1</span><br><span class="line">  nickName = user_a3f9c21b</span><br><span class="line">  icon     = xxx</span><br></pre></td></tr></table></figure>
+
+<p>然后设置过期时间：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ttl := time.Duration(constants.LoginUserTTLMinutes) * time.Minute</span><br><span class="line"><span class="keyword">if</span> err := s.redisClient.Expire(ctx, tokenKey, ttl).Err(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;登录状态保存失败&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>最后删除验证码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> err := s.redisClient.Del(ctx, codeKey).Err(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">    log.Printf(<span class="string">&quot;delete captcha key failed: %v&quot;</span>, err)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>删除验证码不是强依赖，就算失败也不应该影响本次登录结果。</p>
+<h2 id="十八、为什么-Redis-登录态存-UserDTO"><a href="#十八、为什么-Redis-登录态存-UserDTO" class="headerlink" title="十八、为什么 Redis 登录态存 UserDTO"></a>十八、为什么 Redis 登录态存 UserDTO</h2><p>不能把完整用户表记录都存进去。</p>
+<p>原因有三个：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 完整 model 可能包含手机号、密码等敏感信息</span><br><span class="line">2. Redis 登录态应该尽量小</span><br><span class="line">3. 前端只需要 id、nickName、icon</span><br></pre></td></tr></table></figure>
+
+<p>所以存的是 <code>UserDTO</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> UserDTO <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID       <span class="type">int64</span>  <span class="string">`json:&quot;id&quot;`</span></span><br><span class="line">    NickName <span class="type">string</span> <span class="string">`json:&quot;nickName&quot;`</span></span><br><span class="line">    Icon     <span class="type">string</span> <span class="string">`json:&quot;icon&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这也是后端开发里一个非常重要的习惯：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">数据库模型是内部结构</span><br><span class="line">DTO 是对外暴露结构</span><br><span class="line">不要直接把数据库模型裸返回给前端</span><br></pre></td></tr></table></figure>
+
+<h2 id="十九、项目中几个重难点总结"><a href="#十九、项目中几个重难点总结" class="headerlink" title="十九、项目中几个重难点总结"></a>十九、项目中几个重难点总结</h2><h3 id="1-分层不是形式主义"><a href="#1-分层不是形式主义" class="headerlink" title="1. 分层不是形式主义"></a>1. 分层不是形式主义</h3><p>一开始看 Handler、Service、Repository 可能觉得绕。</p>
+<p>但真正写起来以后会发现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Handler 只关心请求参数</span><br><span class="line">Service 只关心业务流程</span><br><span class="line">Repository 只关心数据库</span><br></pre></td></tr></table></figure>
+
+<p>代码更容易检查，也更容易扩展。</p>
+<h3 id="2-Go-的依赖是显式组装的"><a href="#2-Go-的依赖是显式组装的" class="headerlink" title="2. Go 的依赖是显式组装的"></a>2. Go 的依赖是显式组装的</h3><p>Java Spring 里很多依赖是自动注入。</p>
+<p>Go 里我手动写：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">repos := repository.NewRepositories(db)</span><br><span class="line">services := service.NewServices(repos, redisClient)</span><br><span class="line">handlers := handler.NewHandlers(services)</span><br><span class="line">engine := router.NewRouter(handlers, redisClient)</span><br></pre></td></tr></table></figure>
+
+<p>这样虽然多写一点，但依赖关系一眼能看清楚。</p>
+<h3 id="3-context-Context-要一路传下去"><a href="#3-context-Context-要一路传下去" class="headerlink" title="3. context.Context 要一路传下去"></a>3. <code>context.Context</code> 要一路传下去</h3><p>数据库和 Redis 操作都使用请求的 context：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">r.db.WithContext(ctx)</span><br><span class="line">s.redisClient.Get(ctx, key)</span><br></pre></td></tr></table></figure>
+
+<p>这样请求取消后，下游操作也能感知到。</p>
+<h3 id="4-GORM-查询要理解结果类型"><a href="#4-GORM-查询要理解结果类型" class="headerlink" title="4. GORM 查询要理解结果类型"></a>4. GORM 查询要理解结果类型</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">First(&amp;obj)</span><br></pre></td></tr></table></figure>
+
+<p>适合查单条，不存在会返回 <code>gorm.ErrRecordNotFound</code>。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Find(&amp;list)</span><br></pre></td></tr></table></figure>
+
+<p>适合查列表，没有数据通常返回空切片，不算错误。</p>
+<h3 id="5-Redis-错误要区分-redis-Nil"><a href="#5-Redis-错误要区分-redis-Nil" class="headerlink" title="5. Redis 错误要区分 redis.Nil"></a>5. Redis 错误要区分 redis.Nil</h3><p><code>redis.Nil</code> 通常表示 key 不存在。</p>
+<p>比如验证码登录：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> errors.Is(err, redis.Nil) &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;验证码已过期或不存在&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>而其他错误才表示 Redis 异常。</p>
+<h3 id="6-路由要注意泛化路径"><a href="#6-路由要注意泛化路径" class="headerlink" title="6. 路由要注意泛化路径"></a>6. 路由要注意泛化路径</h3><p>像下面这种路由：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">/user/:id</span><br><span class="line">/blog/:id</span><br></pre></td></tr></table></figure>
+
+<p>属于泛化路由，应该放在具体路由后面：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/blog/hot</span><br><span class="line">/blog/likes/:id</span><br><span class="line">/blog/of/user</span><br><span class="line">/blog/:id</span><br></pre></td></tr></table></figure>
+
+<p>否则容易出现路由匹配冲突或请求被错误处理。</p>
+<h3 id="7-字段返回要对齐前端"><a href="#7-字段返回要对齐前端" class="headerlink" title="7. 字段返回要对齐前端"></a>7. 字段返回要对齐前端</h3><p>前端需要的是：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="string">&quot;&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span><span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>所以后端必须统一返回 <code>Result</code>，否则前端可能拿不到数据。</p>
+<h2 id="二十、阶段成果"><a href="#二十、阶段成果" class="headerlink" title="二十、阶段成果"></a>二十、阶段成果</h2><p>到这个阶段，Go 版黑马点评已经完成了这些能力：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">1. Go 项目骨架搭建完成</span><br><span class="line">2. Gin 服务能启动在 8081</span><br><span class="line">3. Viper 能读取配置文件</span><br><span class="line">4. GORM 能连接 MySQL</span><br><span class="line">5. go-redis 能连接 Redis</span><br><span class="line">6. 首页分类能展示</span><br><span class="line">7. 店铺列表和店铺详情能展示</span><br><span class="line">8. 店铺详情优惠券能展示</span><br><span class="line">9. 博客详情和热门博客能展示</span><br><span class="line">10. 用户主页基础信息能展示</span><br><span class="line">11. 验证码能写入 Redis</span><br><span class="line">12. 手机号验证码登录能校验</span><br><span class="line">13. 新用户能自动注册</span><br><span class="line">14. 登录成功能生成 token</span><br><span class="line">15. 登录态能保存到 Redis Hash</span><br></pre></td></tr></table></figure>
+
+<p>这些都是后续功能的基础。</p>
+<p>后面继续往下做时，就可以基于这个登录态去实现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">/user/me 当前登录用户</span><br><span class="line">/user/logout 退出登录</span><br><span class="line">/blog/like/:id 博客点赞</span><br><span class="line">/blog/likes/:id 点赞排行榜</span><br><span class="line">/follow 关注功能</span><br><span class="line">/blog/of/follow 关注 Feed 流</span><br><span class="line">/voucher-order/seckill/:id 秒杀下单</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十一、测试清单"><a href="#二十一、测试清单" class="headerlink" title="二十一、测试清单"></a>二十一、测试清单</h2><p>可以按这个顺序验证当前阶段：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">GET  /shop-type/list</span><br><span class="line">GET  /shop/of/type?typeId=1&amp;current=1</span><br><span class="line">GET  /shop/of/name?name=KTV&amp;current=1</span><br><span class="line">GET  /shop/1</span><br><span class="line">GET  /voucher/list/1</span><br><span class="line">GET  /blog/hot?current=1</span><br><span class="line">GET  /blog/1</span><br><span class="line">GET  /user/2</span><br><span class="line">GET  /user/info/2</span><br><span class="line">POST /user/code?phone=13800138000</span><br><span class="line">POST /user/login</span><br></pre></td></tr></table></figure>
+
+<p>登录成功后，返回值应该类似：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="string">&quot;&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="string">&quot;token字符串&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>Redis 中应该能看到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">login:token:&#123;token&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这说明短信登录和自动注册链路已经打通。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>这一阶段最重要的不是写了多少接口，而是把 Go 后端项目的基本骨架真正搭起来了。</p>
+<p>我从一个空项目开始，依次完成了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">配置读取 -&gt; 数据库连接 -&gt; Redis 连接 -&gt; 分层架构 -&gt; 统一响应 -&gt; 基础查询接口 -&gt; 短信登录 -&gt; 自动注册 -&gt; token 登录态</span><br></pre></td></tr></table></figure>
+
+<p>这些内容是后面所有 Redis 实战功能的地基。</p>
+<p>如果说后面的点赞、关注、Feed、秒杀是“业务难点”，那么这一篇里的内容就是“工程骨架”。骨架稳了，后面每个功能都能沿着同一套 Handler、Service、Repository 的节奏往下写。</p>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://example.com/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" data-id="cuid8_j6ma20anbIxFQs_hyLU" data-title="Go与Redis实战：实现高并发短信登录与自动注册" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="http://example.com/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" data-id="cuidCCSeOOnIpmQZ8-7N6k-qI" data-title="Go与Redis实战：从零搭建黑马点评后端到短信登录与自动注册" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin%E6%A1%86%E6%9E%B6/" rel="tag">Gin框架</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Golang/" rel="tag">Golang</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" rel="tag">后端架构</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" rel="tag">短信登录</a></li></ul>
 
     </footer>
   </div>
@@ -288,11 +417,6 @@ func (s *userService) Me(ctx context.Context) result.Result {
     </a>
   
   
-    <a href="/2026/06/20/hello-world/" id="article-nav-older" class="article-nav-link-wrap">
-      <strong class="article-nav-caption">后一篇</strong>
-      <div class="article-nav-title">Hello World</div>
-    </a>
-  
 </nav>
 
   
@@ -307,7 +431,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
   <div class="widget-wrap">
     <h3 class="widget-title">分类</h3>
     <div class="widget">
-      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%90%8E%E7%AB%AF%E5%BC%80%E5%8F%91%E5%AE%9E%E6%88%98/">后端开发实战</a></li></ul>
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/Redis/">Redis</a></li></ul></li></ul></li></ul>
     </div>
   </div>
 
@@ -317,7 +441,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
   <div class="widget-wrap">
     <h3 class="widget-title">标签</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin%E6%A1%86%E6%9E%B6/" rel="tag">Gin框架</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Golang/" rel="tag">Golang</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" rel="tag">后端架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" rel="tag">短信登录</a></li></ul>
     </div>
   </div>
 
@@ -327,7 +451,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
   <div class="widget-wrap">
     <h3 class="widget-title">标签云</h3>
     <div class="widget tagcloud">
-      <a href="/tags/Gin/" style="font-size: 15px;">Gin</a> <a href="/tags/Gin%E6%A1%86%E6%9E%B6/" style="font-size: 10px;">Gin框架</a> <a href="/tags/Golang/" style="font-size: 10px;">Golang</a> <a href="/tags/Redis/" style="font-size: 20px;">Redis</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a>
+      <a href="/tags/GORM/" style="font-size: 10px;">GORM</a> <a href="/tags/Gin/" style="font-size: 20px;">Gin</a> <a href="/tags/Redis/" style="font-size: 20px;">Redis</a> <a href="/tags/Viper/" style="font-size: 10px;">Viper</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">后端架构</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a> <a href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" style="font-size: 10px;">短信登录</a>
     </div>
   </div>
 
@@ -357,11 +481,7 @@ func (s *userService) Me(ctx context.Context) result.Result {
           </li>
         
           <li>
-            <a href="/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/">Go与Redis实战：实现高并发短信登录与自动注册</a>
-          </li>
-        
-          <li>
-            <a href="/2026/06/20/hello-world/">Hello World</a>
+            <a href="/2026/06/20/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/">Go与Redis实战：从零搭建黑马点评后端到短信登录与自动注册</a>
           </li>
         
       </ul>
