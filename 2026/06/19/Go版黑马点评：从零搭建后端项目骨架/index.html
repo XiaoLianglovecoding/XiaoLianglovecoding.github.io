@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Go 版黑马点评：从零搭建后端项目骨架 | 我的Golang学习博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="这篇文章记录我用 Go 重写黑马点评后端的第一天：不急着写登录、点赞、秒杀这些业务，而是先把一个后端项目最基础的骨架搭起来。 这一阶段的目标很明确：  Go 后端独立成一个新项目，不污染原来的 Java 后端 使用 Gin 搭 HTTP 服务 使用 Viper 读取配置文件 使用 GORM 预留 MySQL 访问能力 使用 go-redis 预留 Redis 客户端 按 Handler、Servi">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go 版黑马点评：从零搭建后端项目骨架">
+<meta property="og:url" content="http://example.com/2026/06/19/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E4%BB%8E%E9%9B%B6%E6%90%AD%E5%BB%BA%E5%90%8E%E7%AB%AF%E9%A1%B9%E7%9B%AE%E9%AA%A8%E6%9E%B6/index.html">
+<meta property="og:site_name" content="我的Golang学习博客">
+<meta property="og:description" content="这篇文章记录我用 Go 重写黑马点评后端的第一天：不急着写登录、点赞、秒杀这些业务，而是先把一个后端项目最基础的骨架搭起来。 这一阶段的目标很明确：  Go 后端独立成一个新项目，不污染原来的 Java 后端 使用 Gin 搭 HTTP 服务 使用 Viper 读取配置文件 使用 GORM 预留 MySQL 访问能力 使用 go-redis 预留 Redis 客户端 按 Handler、Servi">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-19T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-22T13:38:36.044Z">
+<meta property="article:author" content="一点甜a">
+<meta property="article:tag" content="GORM">
+<meta property="article:tag" content="Gin">
+<meta property="article:tag" content="Viper">
+<meta property="article:tag" content="项目架构">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">我的Golang学习博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">记录用Golang+Redis实现大众点评与学习思考</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-Go版黑马点评：从零搭建后端项目骨架" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/19/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E4%BB%8E%E9%9B%B6%E6%90%AD%E5%BB%BA%E5%90%8E%E7%AB%AF%E9%A1%B9%E7%9B%AE%E9%AA%A8%E6%9E%B6/" class="article-date">
+  <time class="dt-published" datetime="2026-06-19T12:00:00.000Z" itemprop="datePublished">2026-06-19</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Go 版黑马点评：从零搭建后端项目骨架
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>这篇文章记录我用 Go 重写黑马点评后端的第一天：不急着写登录、点赞、秒杀这些业务，而是先把一个后端项目最基础的骨架搭起来。</p>
+<p>这一阶段的目标很明确：</p>
+<ul>
+<li>Go 后端独立成一个新项目，不污染原来的 Java 后端</li>
+<li>使用 Gin 搭 HTTP 服务</li>
+<li>使用 Viper 读取配置文件</li>
+<li>使用 GORM 预留 MySQL 访问能力</li>
+<li>使用 go-redis 预留 Redis 客户端</li>
+<li>按 Handler、Service、Repository 分层</li>
+<li>用统一 <code>Result</code> 返回结构对齐前端</li>
+<li>先把前端会访问的路由注册出来，没实现的接口先返回 TODO</li>
+</ul>
+<span id="more"></span>
+
+<h2 id="一、为什么先搭骨架"><a href="#一、为什么先搭骨架" class="headerlink" title="一、为什么先搭骨架"></a>一、为什么先搭骨架</h2><p>一开始我本地已经有三部分东西：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">前端 nginx 项目：黑马点评原来的前端页面</span><br><span class="line">Java 后端项目：原课程里的 Spring Boot 后端</span><br><span class="line">数据库数据：已经导入好的 hm-dianping 数据库</span><br></pre></td></tr></table></figure>
+
+<p>如果直接在 Java 项目里混写 Go 代码，短期看似方便，长期会很乱：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Java 的 pom.xml、application.yml、Mapper、Service 都还在</span><br><span class="line">Go 的 go.mod、internal、cmd 又放进去</span><br></pre></td></tr></table></figure>
+
+<p>所以我选择单独创建 Go 项目：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">E:\IT\Go_hmdianping</span><br></pre></td></tr></table></figure>
+
+<p>原 Java 后端继续保留：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">E:\IDEA-code\hm-dianping</span><br></pre></td></tr></table></figure>
+
+<p>这样做的好处是：Java 版可以作为参考答案，Go 版可以独立演进。数据库和前端共用，但后端代码互不影响。</p>
+<h2 id="二、初始化-Go-模块"><a href="#二、初始化-Go-模块" class="headerlink" title="二、初始化 Go 模块"></a>二、初始化 Go 模块</h2><p>在项目根目录执行：</p>
+<figure class="highlight powershell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">go mod init hmdp<span class="literal">-go</span></span><br></pre></td></tr></table></figure>
+
+<p>生成的 <code>go.mod</code> 类似 Java 项目的 <code>pom.xml</code>，它记录当前项目模块名和依赖。</p>
+<p>这里的模块名是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hmdp-go</span><br></pre></td></tr></table></figure>
+
+<p>后续项目内部包的 import 路径都会从它开始，例如：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> <span class="string">&quot;hmdp-go/internal/service&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>这也是很多 Go 新手容易困惑的点：import 路径不是根据文件夹名字 <code>Go_hmdianping</code> 来写，而是根据 <code>go.mod</code> 里的 module 名来写。</p>
+<p>比如 <code>go.mod</code> 里是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">module hmdp-<span class="keyword">go</span></span><br></pre></td></tr></table></figure>
+
+<p>那项目内部导入就应该是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;hmdp-go/internal/handler&quot;</span></span><br><span class="line"><span class="string">&quot;hmdp-go/internal/service&quot;</span></span><br><span class="line"><span class="string">&quot;hmdp-go/internal/repository&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>不是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;Go_hmdianping/internal/service&quot;</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="三、安装基础依赖"><a href="#三、安装基础依赖" class="headerlink" title="三、安装基础依赖"></a>三、安装基础依赖</h2><p>项目一开始只引入四类核心依赖：</p>
+<figure class="highlight powershell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">go get github.com/<span class="built_in">gin</span><span class="literal">-gonic</span>/<span class="built_in">gin</span></span><br><span class="line">go get gorm.io/gorm</span><br><span class="line">go get gorm.io/driver/mysql</span><br><span class="line">go get github.com/redis/go<span class="literal">-redis</span>/v9</span><br><span class="line">go get github.com/spf13/viper</span><br></pre></td></tr></table></figure>
+
+<p>它们分别负责：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Gin        HTTP 路由和请求处理</span><br><span class="line">GORM       操作 MySQL</span><br><span class="line">mysql      GORM 的 MySQL 驱动</span><br><span class="line">go-redis   操作 Redis</span><br><span class="line">Viper      读取 yaml 配置文件</span><br></pre></td></tr></table></figure>
+
+<p>安装后会出现两个文件：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">go.mod</span><br><span class="line">go.sum</span><br></pre></td></tr></table></figure>
+
+<p><code>go.mod</code> 记录依赖名称和版本。</p>
+<p><code>go.sum</code> 记录依赖包的校验信息，用来保证下载到的依赖没有被篡改。它不是垃圾文件，应该提交到 GitHub。</p>
+<h2 id="四、项目目录结构"><a href="#四、项目目录结构" class="headerlink" title="四、项目目录结构"></a>四、项目目录结构</h2><p>我采用的是 Go 项目里很常见的 <code>cmd + internal</code> 结构：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">Go_hmdianping</span><br><span class="line">├── cmd</span><br><span class="line">│   └── server</span><br><span class="line">│       └── main.go</span><br><span class="line">├── configs</span><br><span class="line">│   └── config.yaml</span><br><span class="line">├── internal</span><br><span class="line">│   ├── config</span><br><span class="line">│   ├── router</span><br><span class="line">│   ├── middleware</span><br><span class="line">│   ├── handler</span><br><span class="line">│   ├── service</span><br><span class="line">│   ├── repository</span><br><span class="line">│   ├── model</span><br><span class="line">│   ├── dto</span><br><span class="line">│   └── pkg</span><br><span class="line">│       ├── result</span><br><span class="line">│       ├── constants</span><br><span class="line">│       └── idworker</span><br><span class="line">├── go.mod</span><br><span class="line">└── go.sum</span><br></pre></td></tr></table></figure>
+
+<p>每个目录的职责如下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">cmd/server/main.go       程序入口，相当于 Spring Boot 启动类</span><br><span class="line">configs/config.yaml      配置文件</span><br><span class="line">internal/config          读取配置、初始化数据库连接</span><br><span class="line">internal/router          注册所有路由</span><br><span class="line">internal/middleware      中间件</span><br><span class="line">internal/handler         接收 HTTP 请求，类似 Controller</span><br><span class="line">internal/service         业务逻辑，类似 Service</span><br><span class="line">internal/repository      数据库访问，类似 Mapper/DAO</span><br><span class="line">internal/model           数据库表结构体</span><br><span class="line">internal/dto             前后端传输对象</span><br><span class="line">internal/pkg/result      统一返回结构</span><br></pre></td></tr></table></figure>
+
+<p>为什么要分这么多层？</p>
+<p>因为我不想让一个函数同时做太多事。一个请求进来后，最好沿着固定路径走：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Router -&gt; Handler -&gt; Service -&gt; Repository -&gt; MySQL/Redis</span><br></pre></td></tr></table></figure>
+
+<p>这样以后调试问题时，可以快速判断问题属于哪一层。</p>
+<h2 id="五、配置文件-config-yaml"><a href="#五、配置文件-config-yaml" class="headerlink" title="五、配置文件 config.yaml"></a>五、配置文件 config.yaml</h2><p>我把服务端口、MySQL、Redis 都放进 <code>configs/config.yaml</code>：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">server:</span></span><br><span class="line">  <span class="attr">port:</span> <span class="number">8081</span></span><br><span class="line"></span><br><span class="line"><span class="attr">mysql:</span></span><br><span class="line">  <span class="attr">host:</span> <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span></span><br><span class="line">  <span class="attr">port:</span> <span class="number">3306</span></span><br><span class="line">  <span class="attr">database:</span> <span class="string">hm-dianping</span></span><br><span class="line">  <span class="attr">username:</span> <span class="string">root</span></span><br><span class="line">  <span class="attr">password:</span> <span class="number">123456</span></span><br><span class="line"></span><br><span class="line"><span class="attr">redis:</span></span><br><span class="line">  <span class="attr">host:</span> <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span></span><br><span class="line">  <span class="attr">port:</span> <span class="number">6379</span></span><br><span class="line">  <span class="attr">password:</span> <span class="number">123456</span></span><br><span class="line">  <span class="attr">database:</span> <span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<p>这里选择 <code>8081</code> 是为了和前端 nginx 配合。</p>
+<p>前端页面访问的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8080</span><br></pre></td></tr></table></figure>
+
+<p>前端里的 <code>/api/...</code> 请求会被 nginx 代理到后端：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081</span><br></pre></td></tr></table></figure>
+
+<p>所以 Go 服务监听 <code>8081</code>，前端配置基本不用动。</p>
+<h2 id="六、用结构体承接配置"><a href="#六、用结构体承接配置" class="headerlink" title="六、用结构体承接配置"></a>六、用结构体承接配置</h2><p>在 Go 里，我不想在代码里到处写：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">v.GetString(<span class="string">&quot;mysql.host&quot;</span>)</span><br><span class="line">v.GetInt(<span class="string">&quot;mysql.port&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这样字段一多就容易乱。</p>
+<p>更舒服的做法是先定义配置结构体：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Config <span class="keyword">struct</span> &#123;</span><br><span class="line">    Server ServerConfig <span class="string">`mapstructure:&quot;server&quot;`</span></span><br><span class="line">    MySQL  MySQLConfig  <span class="string">`mapstructure:&quot;mysql&quot;`</span></span><br><span class="line">    Redis  RedisConfig  <span class="string">`mapstructure:&quot;redis&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> ServerConfig <span class="keyword">struct</span> &#123;</span><br><span class="line">    Port <span class="type">int</span> <span class="string">`mapstructure:&quot;port&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> MySQLConfig <span class="keyword">struct</span> &#123;</span><br><span class="line">    Host     <span class="type">string</span> <span class="string">`mapstructure:&quot;host&quot;`</span></span><br><span class="line">    Port     <span class="type">int</span>    <span class="string">`mapstructure:&quot;port&quot;`</span></span><br><span class="line">    Database <span class="type">string</span> <span class="string">`mapstructure:&quot;database&quot;`</span></span><br><span class="line">    Username <span class="type">string</span> <span class="string">`mapstructure:&quot;username&quot;`</span></span><br><span class="line">    Password <span class="type">string</span> <span class="string">`mapstructure:&quot;password&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> RedisConfig <span class="keyword">struct</span> &#123;</span><br><span class="line">    Host     <span class="type">string</span> <span class="string">`mapstructure:&quot;host&quot;`</span></span><br><span class="line">    Port     <span class="type">int</span>    <span class="string">`mapstructure:&quot;port&quot;`</span></span><br><span class="line">    Password <span class="type">string</span> <span class="string">`mapstructure:&quot;password&quot;`</span></span><br><span class="line">    Database <span class="type">int</span>    <span class="string">`mapstructure:&quot;database&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>mapstructure</code> 标签告诉 Viper：yaml 里的字段应该映射到结构体哪个字段。</p>
+<p>比如：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">server:</span></span><br><span class="line">  <span class="attr">port:</span> <span class="number">8081</span></span><br></pre></td></tr></table></figure>
+
+<p>会被读成：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cfg.Server.Port</span><br></pre></td></tr></table></figure>
+
+<h2 id="七、读取配置文件"><a href="#七、读取配置文件" class="headerlink" title="七、读取配置文件"></a>七、读取配置文件</h2><p>配置读取函数放在 <code>internal/config/config.go</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">Load</span><span class="params">(path <span class="type">string</span>)</span></span> (*Config, <span class="type">error</span>) &#123;</span><br><span class="line">    v := viper.New()</span><br><span class="line">    v.SetConfigFile(path)</span><br><span class="line">    v.SetConfigType(<span class="string">&quot;yaml&quot;</span>)</span><br><span class="line"></span><br><span class="line">    v.SetEnvKeyReplacer(strings.NewReplacer(<span class="string">&quot;.&quot;</span>, <span class="string">&quot;_&quot;</span>))</span><br><span class="line">    v.AutomaticEnv()</span><br><span class="line"></span><br><span class="line">    v.SetDefault(<span class="string">&quot;server.port&quot;</span>, <span class="number">8081</span>)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err := v.ReadInConfig(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, fmt.Errorf(<span class="string">&quot;read config: %w&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">var</span> cfg Config</span><br><span class="line">    <span class="keyword">if</span> err := v.Unmarshal(&amp;cfg); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, fmt.Errorf(<span class="string">&quot;unmarshal config: %w&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> &amp;cfg, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段代码有几个值得记住的点。</p>
+<p>第一，使用 <code>viper.New()</code> 创建独立实例，而不是直接用全局 Viper。这样配置范围更清楚。</p>
+<p>第二，<code>SetDefault(&quot;server.port&quot;, 8081)</code> 给端口一个默认值。万一配置文件里忘了写端口，服务也能按默认值启动。</p>
+<p>第三，错误用 <code>%w</code> 包装：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fmt.Errorf(<span class="string">&quot;read config: %w&quot;</span>, err)</span><br></pre></td></tr></table></figure>
+
+<p>这样上层既能看到“读取配置失败”，也不会丢掉原始错误。</p>
+<h2 id="八、连接-MySQL"><a href="#八、连接-MySQL" class="headerlink" title="八、连接 MySQL"></a>八、连接 MySQL</h2><p>数据库连接放在 <code>internal/config/database.go</code>。</p>
+<p>GORM 连接 MySQL 需要 DSN：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">OpenMySQL</span><span class="params">(cfg MySQLConfig)</span></span> (*gorm.DB, <span class="type">error</span>) &#123;</span><br><span class="line">    dsn := fmt.Sprintf(</span><br><span class="line">        <span class="string">&quot;%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&amp;parseTime=True&amp;loc=Local&quot;</span>,</span><br><span class="line">        cfg.Username,</span><br><span class="line">        cfg.Password,</span><br><span class="line">        cfg.Host,</span><br><span class="line">        cfg.Port,</span><br><span class="line">        cfg.Database,</span><br><span class="line">    )</span><br><span class="line"></span><br><span class="line">    db, err := gorm.Open(mysql.Open(dsn), &amp;gorm.Config&#123;&#125;)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, fmt.Errorf(<span class="string">&quot;open mysql: %w&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> db, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>DSN 可以拆成这样理解：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">用户名:密码@tcp(主机:端口)/数据库名?连接参数</span><br></pre></td></tr></table></figure>
+
+<p>后面的参数也很重要：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">charset=utf8mb4   支持完整 UTF-8，包括 emoji</span><br><span class="line">parseTime=True    让 DATETIME 能映射成 time.Time</span><br><span class="line">loc=Local         使用本地时区</span><br></pre></td></tr></table></figure>
+
+<p>这一步做好后，后面的 Repository 层就不用再关心怎么连接数据库，只接收一个 <code>*gorm.DB</code> 就行。</p>
+<h2 id="九、统一返回结构-Result"><a href="#九、统一返回结构-Result" class="headerlink" title="九、统一返回结构 Result"></a>九、统一返回结构 Result</h2><p>黑马点评前端会根据响应里的 <code>success</code> 字段判断接口是否成功。</p>
+<p>所以 Go 后端必须对齐这个格式：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="string">&quot;&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span><span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>对应 Go 结构体：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Result <span class="keyword">struct</span> &#123;</span><br><span class="line">    Success  <span class="type">bool</span>   <span class="string">`json:&quot;success&quot;`</span></span><br><span class="line">    ErrorMsg <span class="type">string</span> <span class="string">`json:&quot;errorMsg&quot;`</span></span><br><span class="line">    Data     any    <span class="string">`json:&quot;data&quot;`</span></span><br><span class="line">    Total    *<span class="type">int64</span> <span class="string">`json:&quot;total&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">OK</span><span class="params">()</span></span> Result &#123;</span><br><span class="line">    <span class="keyword">return</span> Result&#123;Success: <span class="literal">true</span>&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">OKWithData</span><span class="params">(data any)</span></span> Result &#123;</span><br><span class="line">    <span class="keyword">return</span> Result&#123;Success: <span class="literal">true</span>, Data: data&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">OKWithList</span><span class="params">(data any, total <span class="type">int64</span>)</span></span> Result &#123;</span><br><span class="line">    <span class="keyword">return</span> Result&#123;Success: <span class="literal">true</span>, Data: data, Total: &amp;total&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">Fail</span><span class="params">(message <span class="type">string</span>)</span></span> Result &#123;</span><br><span class="line">    <span class="keyword">return</span> Result&#123;Success: <span class="literal">false</span>, ErrorMsg: message&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里 <code>Data any</code> 表示可以返回任意类型：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">店铺分类列表</span><br><span class="line">店铺详情</span><br><span class="line">博客列表</span><br><span class="line">token 字符串</span><br></pre></td></tr></table></figure>
+
+<p><code>Total *int64</code> 使用指针，是为了没有总数时返回 JSON 的 <code>null</code>。</p>
+<h2 id="十、Handler-辅助函数"><a href="#十、Handler-辅助函数" class="headerlink" title="十、Handler 辅助函数"></a>十、Handler 辅助函数</h2><p>很多接口都要做同样的事情：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">读取路径参数 id</span><br><span class="line">读取 query 参数 current</span><br><span class="line">返回统一 Result</span><br></pre></td></tr></table></figure>
+
+<p>所以我抽了几个小工具：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">writeResult</span><span class="params">(c *gin.Context, res result.Result)</span></span> &#123;</span><br><span class="line">    c.JSON(http.StatusOK, res)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">parseInt64Param</span><span class="params">(c *gin.Context, name <span class="type">string</span>)</span></span> (<span class="type">int64</span>, <span class="type">bool</span>) &#123;</span><br><span class="line">    value := c.Param(name)</span><br><span class="line">    id, err := strconv.ParseInt(value, <span class="number">10</span>, <span class="number">64</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        writeResult(c, result.Fail(<span class="string">&quot;invalid path parameter: &quot;</span>+name))</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>, <span class="literal">false</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> id, <span class="literal">true</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">parseIntQuery</span><span class="params">(c *gin.Context, name <span class="type">string</span>, defaultValue <span class="type">int</span>)</span></span> <span class="type">int</span> &#123;</span><br><span class="line">    value := c.Query(name)</span><br><span class="line">    <span class="keyword">if</span> value == <span class="string">&quot;&quot;</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> defaultValue</span><br><span class="line">    &#125;</span><br><span class="line">    parsed, err := strconv.Atoi(value)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> defaultValue</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> parsed</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>parseInt64Param</code> 适合这种路由：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/1</span><br><span class="line">GET /blog/5</span><br></pre></td></tr></table></figure>
+
+<p><code>parseIntQuery</code> 适合这种请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/of/type?typeId=1&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<p>这类小函数虽然不起眼，但能让 Handler 层干净很多。</p>
+<h2 id="十一、Model-层：结构体和数据库表"><a href="#十一、Model-层：结构体和数据库表" class="headerlink" title="十一、Model 层：结构体和数据库表"></a>十一、Model 层：结构体和数据库表</h2><p>Go 里用结构体表示数据库表。</p>
+<p>比如店铺分类表 <code>tb_shop_type</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> ShopType <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID   <span class="type">int64</span>  <span class="string">`json:&quot;id&quot; gorm:&quot;column:id;primaryKey&quot;`</span></span><br><span class="line">    Name <span class="type">string</span> <span class="string">`json:&quot;name&quot; gorm:&quot;column:name&quot;`</span></span><br><span class="line">    Icon <span class="type">string</span> <span class="string">`json:&quot;icon&quot; gorm:&quot;column:icon&quot;`</span></span><br><span class="line">    Sort <span class="type">int</span>    <span class="string">`json:&quot;sort&quot; gorm:&quot;column:sort&quot;`</span></span><br><span class="line">    TimeFields</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(ShopType)</span></span> TableName() <span class="type">string</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;tb_shop_type&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里同时出现了两个标签：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">json:<span class="string">&quot;name&quot;</span></span><br><span class="line">gorm:<span class="string">&quot;column:name&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>它们不是一回事。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">json 标签：控制返回给前端的 JSON 字段名</span><br><span class="line">gorm 标签：控制结构体字段和数据库列的映射关系</span><br></pre></td></tr></table></figure>
+
+<p>例如数据库列叫：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">type_id</span><br></pre></td></tr></table></figure>
+
+<p>前端需要的 JSON 字段叫：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">typeId</span><br></pre></td></tr></table></figure>
+
+<p>就可以这样写：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TypeID <span class="type">int64</span> <span class="string">`json:&quot;typeId&quot; gorm:&quot;column:type_id&quot;`</span></span><br></pre></td></tr></table></figure>
+
+<p>这也是 Go 后端对接老前端时必须注意的点：字段名要对齐前端，不是只要查到数据库就行。</p>
+<h2 id="十二、DTO-层：不要裸返回数据库模型"><a href="#十二、DTO-层：不要裸返回数据库模型" class="headerlink" title="十二、DTO 层：不要裸返回数据库模型"></a>十二、DTO 层：不要裸返回数据库模型</h2><p>DTO 是 Data Transfer Object，也就是“传输对象”。</p>
+<p>比如用户表里可能有：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">id</span><br><span class="line">phone</span><br><span class="line">password</span><br><span class="line">nick_name</span><br><span class="line">icon</span><br></pre></td></tr></table></figure>
+
+<p>但前端展示用户时不应该看到手机号和密码。</p>
+<p>所以我定义了 <code>UserDTO</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> UserDTO <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID       <span class="type">int64</span>  <span class="string">`json:&quot;id&quot;`</span></span><br><span class="line">    NickName <span class="type">string</span> <span class="string">`json:&quot;nickName&quot;`</span></span><br><span class="line">    Icon     <span class="type">string</span> <span class="string">`json:&quot;icon&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这样后端对外只暴露前端真正需要的字段。</p>
+<p>这个习惯很重要：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Model 是数据库内部结构</span><br><span class="line">DTO 是接口对外结构</span><br></pre></td></tr></table></figure>
+
+<p>两者不要无脑混用。</p>
+<h2 id="十三、Repository-层集合"><a href="#十三、Repository-层集合" class="headerlink" title="十三、Repository 层集合"></a>十三、Repository 层集合</h2><p>Repository 层只负责数据库访问。</p>
+<p>为了统一创建，我写了一个集合：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Repositories <span class="keyword">struct</span> &#123;</span><br><span class="line">    User         UserRepository</span><br><span class="line">    Shop         ShopRepository</span><br><span class="line">    ShopType     ShopTypeRepository</span><br><span class="line">    Blog         BlogRepository</span><br><span class="line">    Follow       FollowRepository</span><br><span class="line">    Voucher      VoucherRepository</span><br><span class="line">    VoucherOrder VoucherOrderRepository</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewRepositories</span><span class="params">(db *gorm.DB)</span></span> *Repositories &#123;</span><br><span class="line">    <span class="keyword">return</span> &amp;Repositories&#123;</span><br><span class="line">        User:         NewUserRepository(db),</span><br><span class="line">        Shop:         NewShopRepository(db),</span><br><span class="line">        ShopType:     NewShopTypeRepository(db),</span><br><span class="line">        Blog:         NewBlogRepository(db),</span><br><span class="line">        Follow:       NewFollowRepository(db),</span><br><span class="line">        Voucher:      NewVoucherRepository(db),</span><br><span class="line">        VoucherOrder: NewVoucherOrderRepository(db),</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>每个 Repository 都拿同一个 <code>*gorm.DB</code>。</p>
+<p>这样做之后，main 函数里只需要：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">repos := repository.NewRepositories(db)</span><br></pre></td></tr></table></figure>
+
+<p>不用一个一个手动 new。</p>
+<h2 id="十四、Service-层集合"><a href="#十四、Service-层集合" class="headerlink" title="十四、Service 层集合"></a>十四、Service 层集合</h2><p>Service 层负责业务逻辑。它通常会依赖 Repository，也可能依赖 Redis。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Services <span class="keyword">struct</span> &#123;</span><br><span class="line">    User         UserService</span><br><span class="line">    Shop         ShopService</span><br><span class="line">    ShopType     ShopTypeService</span><br><span class="line">    Blog         BlogService</span><br><span class="line">    Follow       FollowService</span><br><span class="line">    Upload       UploadService</span><br><span class="line">    Voucher      VoucherService</span><br><span class="line">    VoucherOrder VoucherOrderService</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewServices</span><span class="params">(repos *repository.Repositories, redisClient *redis.Client)</span></span> *Services &#123;</span><br><span class="line">    <span class="keyword">return</span> &amp;Services&#123;</span><br><span class="line">        User:         NewUserService(repos.User, redisClient),</span><br><span class="line">        Shop:         NewShopService(repos.Shop, redisClient),</span><br><span class="line">        ShopType:     NewShopTypeService(repos.ShopType, redisClient),</span><br><span class="line">        Blog:         NewBlogService(repos.Blog, repos.User, redisClient),</span><br><span class="line">        Follow:       NewFollowService(repos.Follow, redisClient),</span><br><span class="line">        Upload:       NewUploadService(),</span><br><span class="line">        Voucher:      NewVoucherService(repos.Voucher, redisClient),</span><br><span class="line">        VoucherOrder: NewVoucherOrderService(repos.VoucherOrder, repos.Voucher, redisClient),</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里有一个值得注意的例子：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Blog: NewBlogService(repos.Blog, repos.User, redisClient)</span><br></pre></td></tr></table></figure>
+
+<p>博客业务不只查 <code>tb_blog</code>，还需要查用户昵称和头像，所以 BlogService 同时依赖 BlogRepository 和 UserRepository。</p>
+<h2 id="十五、main-go-组装依赖"><a href="#十五、main-go-组装依赖" class="headerlink" title="十五、main.go 组装依赖"></a>十五、main.go 组装依赖</h2><p>Go 没有像 Spring 那样的自动注入，这里选择手动组装。</p>
+<p>程序入口：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">    cfg, err := config.Load(<span class="string">&quot;configs/config.yaml&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatalf(<span class="string">&quot;load config: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    db, err := config.OpenMySQL(cfg.MySQL)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatalf(<span class="string">&quot;open mysql: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    redisClient := redis.NewClient(&amp;redis.Options&#123;</span><br><span class="line">        Addr:     fmt.Sprintf(<span class="string">&quot;%s:%d&quot;</span>, cfg.Redis.Host, cfg.Redis.Port),</span><br><span class="line">        Password: cfg.Redis.Password,</span><br><span class="line">        DB:       cfg.Redis.Database,</span><br><span class="line">    &#125;)</span><br><span class="line"></span><br><span class="line">    repos := repository.NewRepositories(db)</span><br><span class="line">    services := service.NewServices(repos, redisClient)</span><br><span class="line">    handlers := handler.NewHandlers(services)</span><br><span class="line">    engine := router.NewRouter(handlers, redisClient)</span><br><span class="line"></span><br><span class="line">    addr := fmt.Sprintf(<span class="string">&quot;:%d&quot;</span>, cfg.Server.Port)</span><br><span class="line">    log.Printf(<span class="string">&quot;hmdp-go server started on %s&quot;</span>, addr)</span><br><span class="line">    <span class="keyword">if</span> err := engine.Run(addr); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatalf(<span class="string">&quot;run server: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段代码就是整个项目的启动链路：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">配置 -&gt; MySQL -&gt; Redis -&gt; Repository -&gt; Service -&gt; Handler -&gt; Router -&gt; HTTP 服务</span><br></pre></td></tr></table></figure>
+
+<p>和 Java 相比，Go 的写法更显式。优点是依赖关系一眼就能看清楚。</p>
+<h2 id="十六、路由注册"><a href="#十六、路由注册" class="headerlink" title="十六、路由注册"></a>十六、路由注册</h2><p>路由统一放在 <code>internal/router/router.go</code>。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewRouter</span><span class="params">(handlers *handler.Handlers, redisClient *redis.Client)</span></span> *gin.Engine &#123;</span><br><span class="line">    r := gin.Default()</span><br><span class="line"></span><br><span class="line">    registerUserRoutes(r, handlers.User)</span><br><span class="line">    registerShopRoutes(r, handlers.Shop)</span><br><span class="line">    registerShopTypeRoutes(r, handlers.ShopType)</span><br><span class="line">    registerBlogRoutes(r, handlers.Blog)</span><br><span class="line">    registerFollowRoutes(r, handlers.Follow)</span><br><span class="line">    registerUploadRoutes(r, handlers.Upload)</span><br><span class="line">    registerVoucherRoutes(r, handlers.Voucher)</span><br><span class="line">    registerVoucherOrderRoutes(r, handlers.VoucherOrder)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> r</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>每个模块再单独注册自己的路由：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">registerShopTypeRoutes</span><span class="params">(r *gin.Engine, h *handler.ShopTypeHandler)</span></span> &#123;</span><br><span class="line">    group := r.Group(<span class="string">&quot;/shop-type&quot;</span>)</span><br><span class="line">    group.GET(<span class="string">&quot;/list&quot;</span>, h.List)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">registerShopRoutes</span><span class="params">(r *gin.Engine, h *handler.ShopHandler)</span></span> &#123;</span><br><span class="line">    group := r.Group(<span class="string">&quot;/shop&quot;</span>)</span><br><span class="line">    group.POST(<span class="string">&quot;&quot;</span>, h.SaveShop)</span><br><span class="line">    group.PUT(<span class="string">&quot;&quot;</span>, h.UpdateShop)</span><br><span class="line">    group.GET(<span class="string">&quot;/of/type&quot;</span>, h.QueryShopByType)</span><br><span class="line">    group.GET(<span class="string">&quot;/of/name&quot;</span>, h.QueryShopByName)</span><br><span class="line">    group.GET(<span class="string">&quot;/:id&quot;</span>, h.QueryShopByID)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里有一个路由顺序问题要特别注意。</p>
+<p>像这种泛化路由：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">/shop/:id</span><br><span class="line">/blog/:id</span><br><span class="line">/user/:id</span><br></pre></td></tr></table></figure>
+
+<p>最好放在更具体的路由后面。</p>
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">/shop/of/type</span><br><span class="line">/shop/of/name</span><br><span class="line">/shop/:id</span><br></pre></td></tr></table></figure>
+
+<p>这样更符合阅读习惯，也能避免将来出现路径匹配上的困惑。</p>
+<h2 id="十七、TODO-路由占位"><a href="#十七、TODO-路由占位" class="headerlink" title="十七、TODO 路由占位"></a>十七、TODO 路由占位</h2><p>项目刚开始时，不可能一次把所有接口都写完。</p>
+<p>但前端可能会提前访问这些接口。如果不注册路由，前端看到的是 404，不知道是路由没写还是业务没写。</p>
+<p>所以我用了 TODO 占位：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">todoRoute</span><span class="params">(message <span class="type">string</span>)</span></span> gin.HandlerFunc &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="function"><span class="keyword">func</span><span class="params">(c *gin.Context)</span></span> &#123;</span><br><span class="line">        c.JSON(http.StatusOK, result.Fail(strings.TrimSpace(message)))</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这样没实现的接口会返回：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">false</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="string">&quot;TODO: query hot blog&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>这对前期调试很有帮助。</p>
+<p>因为前端弹出错误时，我能马上知道是哪个接口还没写。</p>
+<h2 id="十八、第一阶段的接口清单"><a href="#十八、第一阶段的接口清单" class="headerlink" title="十八、第一阶段的接口清单"></a>十八、第一阶段的接口清单</h2><p>骨架阶段先注册接口，不急着实现业务。</p>
+<p>用户相关：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">POST /user/code</span><br><span class="line">POST /user/login</span><br><span class="line">POST /user/logout</span><br><span class="line">GET  /user/me</span><br><span class="line">GET  /user/:id</span><br><span class="line">GET  /user/info/:id</span><br><span class="line">POST /user/sign</span><br><span class="line">GET  /user/sign/count</span><br></pre></td></tr></table></figure>
+
+<p>店铺相关：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">GET  /shop/:id</span><br><span class="line">POST /shop</span><br><span class="line">PUT  /shop</span><br><span class="line">GET  /shop/of/type</span><br><span class="line">GET  /shop/of/name</span><br></pre></td></tr></table></figure>
+
+<p>博客相关：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">POST /blog</span><br><span class="line">GET  /blog/:id</span><br><span class="line">PUT  /blog/like/:id</span><br><span class="line">GET  /blog/of/me</span><br><span class="line">GET  /blog/hot</span><br><span class="line">GET  /blog/likes/:id</span><br><span class="line">GET  /blog/of/user</span><br></pre></td></tr></table></figure>
+
+<p>优惠券相关：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">POST /voucher</span><br><span class="line">POST /voucher/seckill</span><br><span class="line">GET  /voucher/list/:shopId</span><br><span class="line">POST /voucher-order/seckill/:id</span><br></pre></td></tr></table></figure>
+
+<p>一开始所有接口都能被访问，但没有实现的先返回 TODO。</p>
+<h2 id="十九、启动验证"><a href="#十九、启动验证" class="headerlink" title="十九、启动验证"></a>十九、启动验证</h2><p>启动服务：</p>
+<figure class="highlight powershell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">go run ./cmd/server</span><br></pre></td></tr></table></figure>
+
+<p>看到类似输出：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hmdp-go server started on :8081</span><br></pre></td></tr></table></figure>
+
+<p>然后访问：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop-type/list</span><br></pre></td></tr></table></figure>
+
+<p>最开始返回的是：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">false</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="string">&quot;TODO: shop type list&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>这说明：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Gin 服务启动成功</span><br><span class="line">路由注册成功</span><br><span class="line">Handler 能被调用</span><br><span class="line">统一 Result 格式正确</span><br></pre></td></tr></table></figure>
+
+<p>虽然业务还没写，但后端壳子已经跑起来了。</p>
+<h2 id="二十、关于-cache-文件夹"><a href="#二十、关于-cache-文件夹" class="headerlink" title="二十、关于 .cache 文件夹"></a>二十、关于 .cache 文件夹</h2><p>项目里有时会出现 <code>.cache</code> 目录。</p>
+<p>它通常不是业务代码，而是工具或编辑器生成的缓存文件，例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Go 工具缓存</span><br><span class="line">IDE 缓存</span><br><span class="line">测试缓存</span><br><span class="line">插件缓存</span><br></pre></td></tr></table></figure>
+
+<p>一般不需要提交到 GitHub。</p>
+<p>可以在 <code>.gitignore</code> 里加入：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">.cache/</span><br></pre></td></tr></table></figure>
+
+<p>真正应该提交的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">cmd/</span><br><span class="line">configs/</span><br><span class="line">internal/</span><br><span class="line">go.mod</span><br><span class="line">go.sum</span><br><span class="line">.gitignore</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十一、这一阶段最重要的收获"><a href="#二十一、这一阶段最重要的收获" class="headerlink" title="二十一、这一阶段最重要的收获"></a>二十一、这一阶段最重要的收获</h2><p>第一天没有写复杂业务，但做了几件很关键的事情。</p>
+<p>第一，明确了 Go 项目和 Java 项目分开维护。</p>
+<p>这样后面写错 Go 代码，不会影响原来的 Java 项目。</p>
+<p>第二，确定了项目分层。</p>
+<p>以后每个接口都按这个节奏写：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Handler 解析请求</span><br><span class="line">Service 处理业务</span><br><span class="line">Repository 查询数据库</span><br><span class="line">Result 包装返回</span><br></pre></td></tr></table></figure>
+
+<p>第三，理解了 Go 的依赖组装。</p>
+<p>Go 没有自动注入，依赖要自己传：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">db -&gt; repository -&gt; service -&gt; handler -&gt; router</span><br></pre></td></tr></table></figure>
+
+<p>第四，对齐了前端返回格式。</p>
+<p>前端能不能显示，不只看数据库有没有数据，还要看接口返回的 JSON 是否符合前端预期。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>这一篇的重点不是某个具体功能，而是把 Go 版黑马点评的后端地基搭起来。</p>
+<p>完成这一阶段后，项目已经具备了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">可启动的 Gin 服务</span><br><span class="line">可读取的配置文件</span><br><span class="line">可连接的 MySQL</span><br><span class="line">可预留的 Redis 客户端</span><br><span class="line">清晰的分层目录</span><br><span class="line">统一的返回结构</span><br><span class="line">完整的路由占位</span><br></pre></td></tr></table></figure>
+
+<p>接下来就可以开始把 TODO 接口一个个替换成真实业务。</p>
+<p>最适合第一个实现的接口就是首页首屏会用到的：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop-type/list</span><br></pre></td></tr></table></figure>
+
+<p>因为只有它先返回真实分类数据，前端首页才会从一片空白变成能继续点击和调试的页面。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/19/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E4%BB%8E%E9%9B%B6%E6%90%AD%E5%BB%BA%E5%90%8E%E7%AB%AF%E9%A1%B9%E7%9B%AE%E9%AA%A8%E6%9E%B6/" data-id="cuidF2-6Bb3RKtEsBXsiP8iib" data-title="Go 版黑马点评：从零搭建后端项目骨架" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" rel="tag">项目架构</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/06/20/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9AMySQL%E6%89%93%E9%80%9A%E9%A6%96%E9%A1%B5%E5%BA%97%E9%93%BA%E4%B8%8E%E8%AF%A6%E6%83%85%E5%9F%BA%E7%A1%80%E6%9F%A5%E8%AF%A2/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          Go 版黑马点评：用 MySQL 打通首页、店铺列表与详情页
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/06/18/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">Go与Redis实战：从零搭建黑马点评后端到短信登录与自动注册</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/Redis/">Redis</a></li></ul></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" rel="tag">后端架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" rel="tag">短信登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" rel="tag">项目架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" rel="tag">首页接口</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/GORM/" style="font-size: 16.67px;">GORM</a> <a href="/tags/Gin/" style="font-size: 20px;">Gin</a> <a href="/tags/MySQL/" style="font-size: 10px;">MySQL</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Viper/" style="font-size: 13.33px;">Viper</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">后端架构</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a> <a href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" style="font-size: 10px;">短信登录</a> <a href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">项目架构</a> <a href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" style="font-size: 10px;">首页接口</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-blog-like-zset/">Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-login-token-middleware/">Go 版黑马点评：登录、Token 与双层拦截器</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/20/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9AMySQL%E6%89%93%E9%80%9A%E9%A6%96%E9%A1%B5%E5%BA%97%E9%93%BA%E4%B8%8E%E8%AF%A6%E6%83%85%E5%9F%BA%E7%A1%80%E6%9F%A5%E8%AF%A2/">Go 版黑马点评：用 MySQL 打通首页、店铺列表与详情页</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/19/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E4%BB%8E%E9%9B%B6%E6%90%AD%E5%BB%BA%E5%90%8E%E7%AB%AF%E9%A1%B9%E7%9B%AE%E9%AA%A8%E6%9E%B6/">Go 版黑马点评：从零搭建后端项目骨架</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/18/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/">Go与Redis实战：从零搭建黑马点评后端到短信登录与自动注册</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 一点甜a<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

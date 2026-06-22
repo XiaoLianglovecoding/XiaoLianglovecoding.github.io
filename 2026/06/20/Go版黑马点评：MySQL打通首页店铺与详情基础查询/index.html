@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Go 版黑马点评：用 MySQL 打通首页、店铺列表与详情页 | 我的Golang学习博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="这篇文章记录 Go 版黑马点评的第二个阶段：暂时不引入 Redis 缓存优化，先用 MySQL 把前端首页、店铺列表、店铺详情、优惠券列表、博客基础展示这些页面跑起来。 这一阶段的思路是： 12先让页面有数据再考虑性能优化  所以本篇不会展开短信登录、Token、中间件、点赞 ZSet 这些内容，它们属于后续阶段。这里重点记录 MySQL 查询接口从无到有的过程。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go 版黑马点评：用 MySQL 打通首页、店铺列表与详情页">
+<meta property="og:url" content="http://example.com/2026/06/20/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9AMySQL%E6%89%93%E9%80%9A%E9%A6%96%E9%A1%B5%E5%BA%97%E9%93%BA%E4%B8%8E%E8%AF%A6%E6%83%85%E5%9F%BA%E7%A1%80%E6%9F%A5%E8%AF%A2/index.html">
+<meta property="og:site_name" content="我的Golang学习博客">
+<meta property="og:description" content="这篇文章记录 Go 版黑马点评的第二个阶段：暂时不引入 Redis 缓存优化，先用 MySQL 把前端首页、店铺列表、店铺详情、优惠券列表、博客基础展示这些页面跑起来。 这一阶段的思路是： 12先让页面有数据再考虑性能优化  所以本篇不会展开短信登录、Token、中间件、点赞 ZSet 这些内容，它们属于后续阶段。这里重点记录 MySQL 查询接口从无到有的过程。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-20T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-22T13:38:36.858Z">
+<meta property="article:author" content="一点甜a">
+<meta property="article:tag" content="GORM">
+<meta property="article:tag" content="Gin">
+<meta property="article:tag" content="MySQL">
+<meta property="article:tag" content="首页接口">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">我的Golang学习博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">记录用Golang+Redis实现大众点评与学习思考</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-Go版黑马点评：MySQL打通首页店铺与详情基础查询" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/20/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9AMySQL%E6%89%93%E9%80%9A%E9%A6%96%E9%A1%B5%E5%BA%97%E9%93%BA%E4%B8%8E%E8%AF%A6%E6%83%85%E5%9F%BA%E7%A1%80%E6%9F%A5%E8%AF%A2/" class="article-date">
+  <time class="dt-published" datetime="2026-06-20T12:00:00.000Z" itemprop="datePublished">2026-06-20</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Go 版黑马点评：用 MySQL 打通首页、店铺列表与详情页
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>这篇文章记录 Go 版黑马点评的第二个阶段：暂时不引入 Redis 缓存优化，先用 MySQL 把前端首页、店铺列表、店铺详情、优惠券列表、博客基础展示这些页面跑起来。</p>
+<p>这一阶段的思路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">先让页面有数据</span><br><span class="line">再考虑性能优化</span><br></pre></td></tr></table></figure>
+
+<p>所以本篇不会展开短信登录、Token、中间件、点赞 ZSet 这些内容，它们属于后续阶段。这里重点记录 MySQL 查询接口从无到有的过程。</p>
+<span id="more"></span>
+
+<h2 id="一、为什么数据库有数据，前端还是空白"><a href="#一、为什么数据库有数据，前端还是空白" class="headerlink" title="一、为什么数据库有数据，前端还是空白"></a>一、为什么数据库有数据，前端还是空白</h2><p>刚开始打开前端：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8080</span><br></pre></td></tr></table></figure>
+
+<p>页面可能是一片空白，或者顶部只弹出 TODO 错误。</p>
+<p>这时候很容易误以为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我数据库里明明已经有数据了，为什么页面不显示？</span><br></pre></td></tr></table></figure>
+
+<p>其实前端不会直接读数据库。它只能通过接口拿数据。</p>
+<p>整个链路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">浏览器页面</span><br><span class="line">  -&gt; axios 请求 /api/xxx</span><br><span class="line">  -&gt; nginx 代理到 Go 后端 8081</span><br><span class="line">  -&gt; Gin 路由命中 Handler</span><br><span class="line">  -&gt; Service 调 Repository</span><br><span class="line">  -&gt; GORM 查询 MySQL</span><br><span class="line">  -&gt; 返回统一 Result</span><br><span class="line">  -&gt; 前端根据 success 和 data 渲染页面</span><br></pre></td></tr></table></figure>
+
+<p>所以数据库有数据只是第一步。</p>
+<p>真正要让页面显示，还要满足：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">接口路径正确</span><br><span class="line">接口返回 success=true</span><br><span class="line">data 字段结构符合前端预期</span><br><span class="line">字段名和 JSON tag 对得上</span><br></pre></td></tr></table></figure>
+
+<p>当时 <code>/shop-type/list</code> 返回的是：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">false</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="string">&quot;TODO: shop type list&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>前端看到 <code>success=false</code>，当然不会继续渲染分类数据。</p>
+<p>因此第一个真实接口应该从首页最先请求的店铺分类开始。</p>
+<h2 id="二、先用浏览器-Network-找接口顺序"><a href="#二、先用浏览器-Network-找接口顺序" class="headerlink" title="二、先用浏览器 Network 找接口顺序"></a>二、先用浏览器 Network 找接口顺序</h2><p>开发前端配套后端时，不要盲猜接口。</p>
+<p>更推荐打开浏览器开发者工具：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">F12 -&gt; Network -&gt; 刷新页面</span><br></pre></td></tr></table></figure>
+
+<p>观察前端到底请求了哪些接口。</p>
+<p>首页常见请求顺序大致是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">GET /shop-type/list</span><br><span class="line">GET /blog/hot?current=1</span><br></pre></td></tr></table></figure>
+
+<p>点击分类后会请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/of/type?typeId=1&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<p>点击某个店铺后会请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/:id</span><br><span class="line">GET /voucher/list/:shopId</span><br></pre></td></tr></table></figure>
+
+<p>所以这一阶段我按这个顺序开发：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1. 店铺分类列表</span><br><span class="line">2. 分类店铺列表</span><br><span class="line">3. 店铺详情</span><br><span class="line">4. 店铺名称搜索</span><br><span class="line">5. 店铺优惠券列表</span><br><span class="line">6. 热门博客和博客详情</span><br><span class="line">7. 用户基础信息和用户主页博客列表</span><br></pre></td></tr></table></figure>
+
+<h2 id="三、店铺分类接口"><a href="#三、店铺分类接口" class="headerlink" title="三、店铺分类接口"></a>三、店铺分类接口</h2><p>首页顶部分类图标来自：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop-type/list</span><br></pre></td></tr></table></figure>
+
+<p>它查询的是数据库表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">tb_shop_type</span><br></pre></td></tr></table></figure>
+
+<p>对应 model：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> ShopType <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID   <span class="type">int64</span>  <span class="string">`json:&quot;id&quot; gorm:&quot;column:id;primaryKey&quot;`</span></span><br><span class="line">    Name <span class="type">string</span> <span class="string">`json:&quot;name&quot; gorm:&quot;column:name&quot;`</span></span><br><span class="line">    Icon <span class="type">string</span> <span class="string">`json:&quot;icon&quot; gorm:&quot;column:icon&quot;`</span></span><br><span class="line">    Sort <span class="type">int</span>    <span class="string">`json:&quot;sort&quot; gorm:&quot;column:sort&quot;`</span></span><br><span class="line">    TimeFields</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(ShopType)</span></span> TableName() <span class="type">string</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;tb_shop_type&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里最重要的是 <code>json</code> 字段名。</p>
+<p>前端需要：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;id&quot;</span><span class="punctuation">:</span> <span class="number">1</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;美食&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;icon&quot;</span><span class="punctuation">:</span> <span class="string">&quot;/imgs/types/ms.png&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;sort&quot;</span><span class="punctuation">:</span> <span class="number">1</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>所以结构体里要写：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Icon <span class="type">string</span> <span class="string">`json:&quot;icon&quot; gorm:&quot;column:icon&quot;`</span></span><br></pre></td></tr></table></figure>
+
+<p>如果字段名对不上，数据库查到了，前端也可能渲染不出来。</p>
+<h2 id="四、分类-Repository：只负责查库"><a href="#四、分类-Repository：只负责查库" class="headerlink" title="四、分类 Repository：只负责查库"></a>四、分类 Repository：只负责查库</h2><p>Repository 层只写数据库查询。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> ShopTypeRepository <span class="keyword">interface</span> &#123;</span><br><span class="line">    FindShopTypes(ctx context.Context) ([]model.ShopType, <span class="type">error</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> shopTypeRepository <span class="keyword">struct</span> &#123;</span><br><span class="line">    db *gorm.DB</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewShopTypeRepository</span><span class="params">(db *gorm.DB)</span></span> ShopTypeRepository &#123;</span><br><span class="line">    <span class="keyword">return</span> &amp;shopTypeRepository&#123;db: db&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopTypeRepository)</span></span> FindShopTypes(ctx context.Context) ([]model.ShopType, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> shopTypes []model.ShopType</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Order(<span class="string">&quot;sort ASC&quot;</span>).</span><br><span class="line">        Find(&amp;shopTypes).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> shopTypes, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>对应 SQL 大概是：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> <span class="operator">*</span> <span class="keyword">FROM</span> tb_shop_type <span class="keyword">ORDER</span> <span class="keyword">BY</span> sort <span class="keyword">ASC</span>;</span><br></pre></td></tr></table></figure>
+
+<p>这里用到了几个 GORM 基础写法：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">WithContext(ctx)     让查询绑定请求生命周期</span><br><span class="line">Order(&quot;sort ASC&quot;)   按 sort 升序</span><br><span class="line">Find(&amp;shopTypes)    查询多条记录</span><br></pre></td></tr></table></figure>
+
+<p><code>Find</code> 查不到数据时通常返回空切片，不会像 <code>First</code> 那样返回 <code>gorm.ErrRecordNotFound</code>。</p>
+<h2 id="五、分类-Service：包装业务结果"><a href="#五、分类-Service：包装业务结果" class="headerlink" title="五、分类 Service：包装业务结果"></a>五、分类 Service：包装业务结果</h2><p>Service 层不直接写 SQL，它调用 Repository。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> ShopTypeService <span class="keyword">interface</span> &#123;</span><br><span class="line">    List(ctx context.Context) result.Result</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> shopTypeService <span class="keyword">struct</span> &#123;</span><br><span class="line">    shopTypeRepo repository.ShopTypeRepository</span><br><span class="line">    redisClient  *redis.Client</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewShopTypeService</span><span class="params">(shopTypeRepo repository.ShopTypeRepository, redisClient *redis.Client)</span></span> ShopTypeService &#123;</span><br><span class="line">    <span class="keyword">return</span> &amp;shopTypeService&#123;</span><br><span class="line">        shopTypeRepo: shopTypeRepo,</span><br><span class="line">        redisClient:  redisClient,</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopTypeService)</span></span> List(ctx context.Context) result.Result &#123;</span><br><span class="line">    shopTypes, err := s.shopTypeRepo.FindShopTypes(ctx)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop type failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shopTypes)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里虽然结构体里已经放了 <code>redisClient</code>，但当前阶段先不用 Redis。</p>
+<p>这样后面做缓存时，不需要再改构造函数，只要在 <code>List</code> 里加：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">先查 Redis</span><br><span class="line">Redis 没有再查 MySQL</span><br><span class="line">查到后写回 Redis</span><br></pre></td></tr></table></figure>
+
+<h2 id="六、分类-Handler：越薄越好"><a href="#六、分类-Handler：越薄越好" class="headerlink" title="六、分类 Handler：越薄越好"></a>六、分类 Handler：越薄越好</h2><p>Handler 层处理 HTTP 请求：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> ShopTypeHandler <span class="keyword">struct</span> &#123;</span><br><span class="line">    shopTypeService service.ShopTypeService</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewShopTypeHandler</span><span class="params">(shopTypeService service.ShopTypeService)</span></span> *ShopTypeHandler &#123;</span><br><span class="line">    <span class="keyword">return</span> &amp;ShopTypeHandler&#123;shopTypeService: shopTypeService&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *ShopTypeHandler)</span></span> List(c *gin.Context) &#123;</span><br><span class="line">    writeResult(c, h.shopTypeService.List(c.Request.Context()))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个 Handler 几乎没有业务逻辑。</p>
+<p>这是我这一阶段逐渐形成的习惯：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Handler 不查数据库</span><br><span class="line">Handler 不拼业务数据</span><br><span class="line">Handler 只解析请求、调用 Service、返回 Result</span><br></pre></td></tr></table></figure>
+
+<p>路由注册：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">registerShopTypeRoutes</span><span class="params">(r *gin.Engine, h *handler.ShopTypeHandler)</span></span> &#123;</span><br><span class="line">    group := r.Group(<span class="string">&quot;/shop-type&quot;</span>)</span><br><span class="line">    group.GET(<span class="string">&quot;/list&quot;</span>, h.List)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>测试：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop-type/list</span><br></pre></td></tr></table></figure>
+
+<p>分类图标能显示出来，说明第一条 MySQL 查询链路打通了。</p>
+<h2 id="七、店铺模型-Shop"><a href="#七、店铺模型-Shop" class="headerlink" title="七、店铺模型 Shop"></a>七、店铺模型 Shop</h2><p>点击分类后，前端要展示店铺列表。</p>
+<p>店铺表是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">tb_shop</span><br></pre></td></tr></table></figure>
+
+<p>对应 model：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Shop <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID        <span class="type">int64</span>   <span class="string">`json:&quot;id&quot; gorm:&quot;column:id;primaryKey&quot;`</span></span><br><span class="line">    Name      <span class="type">string</span>  <span class="string">`json:&quot;name&quot; gorm:&quot;column:name&quot;`</span></span><br><span class="line">    TypeID    <span class="type">int64</span>   <span class="string">`json:&quot;typeId&quot; gorm:&quot;column:type_id&quot;`</span></span><br><span class="line">    Images    <span class="type">string</span>  <span class="string">`json:&quot;images&quot; gorm:&quot;column:images&quot;`</span></span><br><span class="line">    Area      <span class="type">string</span>  <span class="string">`json:&quot;area&quot; gorm:&quot;column:area&quot;`</span></span><br><span class="line">    Address   <span class="type">string</span>  <span class="string">`json:&quot;address&quot; gorm:&quot;column:address&quot;`</span></span><br><span class="line">    X         <span class="type">float64</span> <span class="string">`json:&quot;x&quot; gorm:&quot;column:x&quot;`</span></span><br><span class="line">    Y         <span class="type">float64</span> <span class="string">`json:&quot;y&quot; gorm:&quot;column:y&quot;`</span></span><br><span class="line">    AvgPrice  <span class="type">int64</span>   <span class="string">`json:&quot;avgPrice&quot; gorm:&quot;column:avg_price&quot;`</span></span><br><span class="line">    Sold      <span class="type">int</span>     <span class="string">`json:&quot;sold&quot; gorm:&quot;column:sold&quot;`</span></span><br><span class="line">    Comments  <span class="type">int</span>     <span class="string">`json:&quot;comments&quot; gorm:&quot;column:comments&quot;`</span></span><br><span class="line">    Score     <span class="type">int</span>     <span class="string">`json:&quot;score&quot; gorm:&quot;column:score&quot;`</span></span><br><span class="line">    OpenHours <span class="type">string</span>  <span class="string">`json:&quot;openHours&quot; gorm:&quot;column:open_hours&quot;`</span></span><br><span class="line">    Distance  <span class="type">float64</span> <span class="string">`json:&quot;distance,omitempty&quot; gorm:&quot;-&quot;`</span></span><br><span class="line">    TimeFields</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(Shop)</span></span> TableName() <span class="type">string</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;tb_shop&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里有几个重点。</p>
+<p><code>TypeID</code> 对应数据库列 <code>type_id</code>，但返回给前端要是 <code>typeId</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TypeID <span class="type">int64</span> <span class="string">`json:&quot;typeId&quot; gorm:&quot;column:type_id&quot;`</span></span><br></pre></td></tr></table></figure>
+
+<p><code>Distance</code> 当前不在数据库表里，是以后做附近店铺 GEO 查询时给前端返回距离用的：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Distance <span class="type">float64</span> <span class="string">`json:&quot;distance,omitempty&quot; gorm:&quot;-&quot;`</span></span><br></pre></td></tr></table></figure>
+
+<p><code>gorm:&quot;-&quot;</code> 表示 GORM 不把这个字段当成数据库列。</p>
+<h2 id="八、根据-id-查询店铺详情"><a href="#八、根据-id-查询店铺详情" class="headerlink" title="八、根据 id 查询店铺详情"></a>八、根据 id 查询店铺详情</h2><p>店铺详情接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/:id</span><br></pre></td></tr></table></figure>
+
+<p>Repository：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopRepository)</span></span> FindShopByID(ctx context.Context, id <span class="type">int64</span>) (*model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> shop model.Shop</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Where(<span class="string">&quot;id = ?&quot;</span>, id).</span><br><span class="line">        First(&amp;shop).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> &amp;shop, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里使用 <code>First</code>，因为只查一条。</p>
+<p>如果店铺不存在，GORM 会返回：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gorm.ErrRecordNotFound</span><br></pre></td></tr></table></figure>
+
+<p>Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> QueryByID(ctx context.Context, id <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> id &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid shop id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    shop, err := s.shopRepo.FindShopByID(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shop)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Handler：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *ShopHandler)</span></span> QueryShopByID(c *gin.Context) &#123;</span><br><span class="line">    id, ok := parseInt64Param(c, <span class="string">&quot;id&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> !ok &#123;</span><br><span class="line">        <span class="keyword">return</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    writeResult(c, h.shopService.QueryByID(c.Request.Context(), id))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>测试：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop/1</span><br></pre></td></tr></table></figure>
+
+<h2 id="九、根据分类查询店铺列表"><a href="#九、根据分类查询店铺列表" class="headerlink" title="九、根据分类查询店铺列表"></a>九、根据分类查询店铺列表</h2><p>分类店铺列表接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/of/type?typeId=1&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<p>这个接口有两个参数：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">typeId   店铺分类 id</span><br><span class="line">current  当前页码</span><br></pre></td></tr></table></figure>
+
+<p>Handler：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *ShopHandler)</span></span> QueryShopByType(c *gin.Context) &#123;</span><br><span class="line">    typeID := <span class="type">int64</span>(parseIntQuery(c, <span class="string">&quot;typeId&quot;</span>, <span class="number">0</span>))</span><br><span class="line">    current := parseIntQuery(c, <span class="string">&quot;current&quot;</span>, <span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">    writeResult(c, h.shopService.QueryByType(</span><br><span class="line">        c.Request.Context(),</span><br><span class="line">        typeID,</span><br><span class="line">        current,</span><br><span class="line">    ))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> QueryByType(ctx context.Context, typeID <span class="type">int64</span>, current <span class="type">int</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> typeID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid typeID&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    shops, err := s.shopRepo.FindShopsByType(ctx, typeID, current)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop by type failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shops)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Repository：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopRepository)</span></span> FindShopsByType(ctx context.Context, typeID <span class="type">int64</span>, current <span class="type">int</span>) ([]model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> shops []model.Shop</span><br><span class="line"></span><br><span class="line">    <span class="keyword">const</span> pageSize = <span class="number">5</span></span><br><span class="line">    <span class="keyword">if</span> current &lt; <span class="number">1</span> &#123;</span><br><span class="line">        current = <span class="number">1</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    offset := (current - <span class="number">1</span>) * pageSize</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Where(<span class="string">&quot;type_id = ?&quot;</span>, typeID).</span><br><span class="line">        Offset(offset).</span><br><span class="line">        Limit(pageSize).</span><br><span class="line">        Find(&amp;shops).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> shops, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>分页公式：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">offset = (current - 1) * pageSize</span><br></pre></td></tr></table></figure>
+
+<p>例如每页 5 条：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">第 1 页：offset = 0</span><br><span class="line">第 2 页：offset = 5</span><br><span class="line">第 3 页：offset = 10</span><br></pre></td></tr></table></figure>
+
+<p>对应 SQL 大概是：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> <span class="operator">*</span> <span class="keyword">FROM</span> tb_shop</span><br><span class="line"><span class="keyword">WHERE</span> type_id <span class="operator">=</span> <span class="number">1</span></span><br><span class="line">LIMIT <span class="number">5</span> <span class="keyword">OFFSET</span> <span class="number">0</span>;</span><br></pre></td></tr></table></figure>
+
+<p>测试：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop/of/type?typeId=1&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<h2 id="十、根据名称搜索店铺"><a href="#十、根据名称搜索店铺" class="headerlink" title="十、根据名称搜索店铺"></a>十、根据名称搜索店铺</h2><p>顶部搜索框会用到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/of/name?name=KTV&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<p>Handler：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *ShopHandler)</span></span> QueryShopByName(c *gin.Context) &#123;</span><br><span class="line">    name := c.Query(<span class="string">&quot;name&quot;</span>)</span><br><span class="line">    current := parseIntQuery(c, <span class="string">&quot;current&quot;</span>, <span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">    writeResult(c, h.shopService.QueryByName(</span><br><span class="line">        c.Request.Context(),</span><br><span class="line">        name,</span><br><span class="line">        current,</span><br><span class="line">    ))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Repository 里用 <code>LIKE</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopRepository)</span></span> FindShopsByName(ctx context.Context, name <span class="type">string</span>, current <span class="type">int</span>) ([]model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> shops []model.Shop</span><br><span class="line"></span><br><span class="line">    <span class="keyword">const</span> pageSize = <span class="number">10</span></span><br><span class="line">    <span class="keyword">if</span> current &lt; <span class="number">1</span> &#123;</span><br><span class="line">        current = <span class="number">1</span></span><br><span class="line">    &#125;</span><br><span class="line">    offset := (current - <span class="number">1</span>) * pageSize</span><br><span class="line"></span><br><span class="line">    query := r.db.WithContext(ctx).Model(&amp;model.Shop&#123;&#125;)</span><br><span class="line">    <span class="keyword">if</span> name != <span class="string">&quot;&quot;</span> &#123;</span><br><span class="line">        query = query.Where(<span class="string">&quot;name LIKE ?&quot;</span>, <span class="string">&quot;%&quot;</span>+name+<span class="string">&quot;%&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    err := query.</span><br><span class="line">        Offset(offset).</span><br><span class="line">        Limit(pageSize).</span><br><span class="line">        Find(&amp;shops).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> shops, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里没有手写拼接 SQL：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;name LIKE &#x27;%&quot;</span> + name + <span class="string">&quot;%&#x27;&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>而是使用占位符：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Where(<span class="string">&quot;name LIKE ?&quot;</span>, <span class="string">&quot;%&quot;</span>+name+<span class="string">&quot;%&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这样能避免很多 SQL 注入和转义问题。</p>
+<p>测试：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop/of/name?name=KTV&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<h2 id="十一、店铺接口这一阶段学到的-GORM-能力"><a href="#十一、店铺接口这一阶段学到的-GORM-能力" class="headerlink" title="十一、店铺接口这一阶段学到的 GORM 能力"></a>十一、店铺接口这一阶段学到的 GORM 能力</h2><p>这一组接口虽然不复杂，但把 GORM 最常用的查询方式都练了一遍。</p>
+<p>单条查询：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">First(&amp;shop)</span><br></pre></td></tr></table></figure>
+
+<p>多条查询：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Find(&amp;shops)</span><br></pre></td></tr></table></figure>
+
+<p>条件查询：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Where(<span class="string">&quot;type_id = ?&quot;</span>, typeID)</span><br></pre></td></tr></table></figure>
+
+<p>模糊查询：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Where(<span class="string">&quot;name LIKE ?&quot;</span>, <span class="string">&quot;%&quot;</span>+name+<span class="string">&quot;%&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>分页：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Offset(offset).Limit(pageSize)</span><br></pre></td></tr></table></figure>
+
+<p>排序：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Order(<span class="string">&quot;sort ASC&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这些是后面写博客、关注、优惠券、订单时都会反复用到的基础。</p>
+<h2 id="十二、店铺详情页的优惠券列表"><a href="#十二、店铺详情页的优惠券列表" class="headerlink" title="十二、店铺详情页的优惠券列表"></a>十二、店铺详情页的优惠券列表</h2><p>店铺详情页除了店铺本身，还会请求优惠券：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /voucher/list/:shopId</span><br></pre></td></tr></table></figure>
+
+<p>优惠券数据涉及两张表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">tb_voucher           优惠券基础信息</span><br><span class="line">tb_seckill_voucher   秒杀券库存、开始时间、结束时间</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，前端想要一张券，但后端要从两张表里组装数据。</p>
+<h2 id="十三、优惠券模型和一对一关联"><a href="#十三、优惠券模型和一对一关联" class="headerlink" title="十三、优惠券模型和一对一关联"></a>十三、优惠券模型和一对一关联</h2><p>基础优惠券：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Voucher <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID          <span class="type">int64</span>      <span class="string">`json:&quot;id&quot; gorm:&quot;column:id;primaryKey&quot;`</span></span><br><span class="line">    ShopID      <span class="type">int64</span>      <span class="string">`json:&quot;shopId&quot; gorm:&quot;column:shop_id&quot;`</span></span><br><span class="line">    Title       <span class="type">string</span>     <span class="string">`json:&quot;title&quot; gorm:&quot;column:title&quot;`</span></span><br><span class="line">    SubTitle    <span class="type">string</span>     <span class="string">`json:&quot;subTitle&quot; gorm:&quot;column:sub_title&quot;`</span></span><br><span class="line">    Rules       <span class="type">string</span>     <span class="string">`json:&quot;rules&quot; gorm:&quot;column:rules&quot;`</span></span><br><span class="line">    PayValue    <span class="type">int64</span>      <span class="string">`json:&quot;payValue&quot; gorm:&quot;column:pay_value&quot;`</span></span><br><span class="line">    ActualValue <span class="type">int64</span>      <span class="string">`json:&quot;actualValue&quot; gorm:&quot;column:actual_value&quot;`</span></span><br><span class="line">    Type        <span class="type">int</span>        <span class="string">`json:&quot;type&quot; gorm:&quot;column:type&quot;`</span></span><br><span class="line">    Status      <span class="type">int</span>        <span class="string">`json:&quot;status&quot; gorm:&quot;column:status&quot;`</span></span><br><span class="line">    Stock       <span class="type">int</span>        <span class="string">`json:&quot;stock,omitempty&quot; gorm:&quot;-&quot;`</span></span><br><span class="line">    BeginTime   *time.Time <span class="string">`json:&quot;beginTime,omitempty&quot; gorm:&quot;-&quot;`</span></span><br><span class="line">    EndTime     *time.Time <span class="string">`json:&quot;endTime,omitempty&quot; gorm:&quot;-&quot;`</span></span><br><span class="line"></span><br><span class="line">    SeckillVoucher *SeckillVoucher <span class="string">`json:&quot;-&quot; gorm:&quot;foreignKey:VoucherID;references:ID&quot;`</span></span><br><span class="line">    TimeFields</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(Voucher)</span></span> TableName() <span class="type">string</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;tb_voucher&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>秒杀券扩展信息：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> SeckillVoucher <span class="keyword">struct</span> &#123;</span><br><span class="line">    VoucherID <span class="type">int64</span>     <span class="string">`json:&quot;voucherId&quot; gorm:&quot;column:voucher_id;primaryKey&quot;`</span></span><br><span class="line">    Stock     <span class="type">int</span>       <span class="string">`json:&quot;stock&quot; gorm:&quot;column:stock&quot;`</span></span><br><span class="line">    BeginTime time.Time <span class="string">`json:&quot;beginTime&quot; gorm:&quot;column:begin_time&quot;`</span></span><br><span class="line">    EndTime   time.Time <span class="string">`json:&quot;endTime&quot; gorm:&quot;column:end_time&quot;`</span></span><br><span class="line">    TimeFields</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(SeckillVoucher)</span></span> TableName() <span class="type">string</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;tb_seckill_voucher&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里最关键的是关联字段：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SeckillVoucher *SeckillVoucher <span class="string">`json:&quot;-&quot; gorm:&quot;foreignKey:VoucherID;references:ID&quot;`</span></span><br></pre></td></tr></table></figure>
+
+<p>意思是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Voucher.ID 对应 SeckillVoucher.VoucherID</span><br></pre></td></tr></table></figure>
+
+<p><code>json:&quot;-&quot;</code> 表示这个嵌套对象不直接返回给前端。</p>
+<p>前端不需要看见：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;seckillVoucher&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;stock&quot;</span><span class="punctuation">:</span> <span class="number">100</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>它更希望直接拿到：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;stock&quot;</span><span class="punctuation">:</span> <span class="number">100</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;beginTime&quot;</span><span class="punctuation">:</span> <span class="string">&quot;...&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;endTime&quot;</span><span class="punctuation">:</span> <span class="string">&quot;...&quot;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>所以后面 Service 层要做一次拍平。</p>
+<h2 id="十四、Preload-预加载"><a href="#十四、Preload-预加载" class="headerlink" title="十四、Preload 预加载"></a>十四、Preload 预加载</h2><p>Repository：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *voucherRepository)</span></span> FindVouchersByShopID(ctx context.Context, shopID <span class="type">int64</span>) ([]model.Voucher, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> vouchers []model.Voucher</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Preload(<span class="string">&quot;SeckillVoucher&quot;</span>).</span><br><span class="line">        Where(<span class="string">&quot;shop_id = ?&quot;</span>, shopID).</span><br><span class="line">        Find(&amp;vouchers).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> vouchers, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>Preload(&quot;SeckillVoucher&quot;)</code> 的作用是：查询 <code>tb_voucher</code> 的同时，把关联的秒杀券信息也查出来。</p>
+<p>它适合这种场景：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">主表：tb_voucher</span><br><span class="line">关联表：tb_seckill_voucher</span><br><span class="line">一个 Voucher 最多对应一个 SeckillVoucher</span><br></pre></td></tr></table></figure>
+
+<h2 id="十五、Service-层组装优惠券返回值"><a href="#十五、Service-层组装优惠券返回值" class="headerlink" title="十五、Service 层组装优惠券返回值"></a>十五、Service 层组装优惠券返回值</h2><p>Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherService)</span></span> QueryVoucherOfShop(ctx context.Context, shopID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> shopID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid shop id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    vouchers, err := s.voucherRepo.FindVouchersByShopID(ctx, shopID)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query voucher of shop failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> i := <span class="keyword">range</span> vouchers &#123;</span><br><span class="line">        <span class="keyword">if</span> vouchers[i].SeckillVoucher != <span class="literal">nil</span> &#123;</span><br><span class="line">            vouchers[i].Stock = vouchers[i].SeckillVoucher.Stock</span><br><span class="line">            vouchers[i].BeginTime = &amp;vouchers[i].SeckillVoucher.BeginTime</span><br><span class="line">            vouchers[i].EndTime = &amp;vouchers[i].SeckillVoucher.EndTime</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(vouchers)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段代码的重点是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Repository 负责把表查出来</span><br><span class="line">Service 负责把数据整理成前端想要的结构</span><br></pre></td></tr></table></figure>
+
+<p>如果是普通券，<code>SeckillVoucher == nil</code>，就不补库存和时间。</p>
+<p>如果是秒杀券，就把库存、开始时间、结束时间补到外层 <code>Voucher</code>。</p>
+<p>这一阶段只是展示优惠券，不做秒杀下单，也不处理并发库存。</p>
+<h2 id="十六、热门博客基础查询"><a href="#十六、热门博客基础查询" class="headerlink" title="十六、热门博客基础查询"></a>十六、热门博客基础查询</h2><p>首页还会展示热门探店笔记：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /blog/hot?current=1</span><br></pre></td></tr></table></figure>
+
+<p>博客表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">tb_blog</span><br></pre></td></tr></table></figure>
+
+<p>模型：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Blog <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID       <span class="type">int64</span>   <span class="string">`json:&quot;id&quot; gorm:&quot;column:id;primaryKey&quot;`</span></span><br><span class="line">    ShopID   <span class="type">int64</span>   <span class="string">`json:&quot;shopId&quot; gorm:&quot;column:shop_id&quot;`</span></span><br><span class="line">    UserID   <span class="type">int64</span>   <span class="string">`json:&quot;userId&quot; gorm:&quot;column:user_id&quot;`</span></span><br><span class="line">    Title    <span class="type">string</span>  <span class="string">`json:&quot;title&quot; gorm:&quot;column:title&quot;`</span></span><br><span class="line">    Images   <span class="type">string</span>  <span class="string">`json:&quot;images&quot; gorm:&quot;column:images&quot;`</span></span><br><span class="line">    Content  <span class="type">string</span>  <span class="string">`json:&quot;content&quot; gorm:&quot;column:content&quot;`</span></span><br><span class="line">    Liked    <span class="type">int</span>     <span class="string">`json:&quot;liked&quot; gorm:&quot;column:liked&quot;`</span></span><br><span class="line">    Comments <span class="type">int</span>     <span class="string">`json:&quot;comments&quot; gorm:&quot;column:comments&quot;`</span></span><br><span class="line">    Name     <span class="type">string</span>  <span class="string">`json:&quot;name,omitempty&quot; gorm:&quot;-&quot;`</span></span><br><span class="line">    Icon     <span class="type">string</span>  <span class="string">`json:&quot;icon,omitempty&quot; gorm:&quot;-&quot;`</span></span><br><span class="line">    IsLike   <span class="type">bool</span>    <span class="string">`json:&quot;isLike&quot; gorm:&quot;-&quot;`</span></span><br><span class="line">    Distance <span class="type">float64</span> <span class="string">`json:&quot;distance,omitempty&quot; gorm:&quot;-&quot;`</span></span><br><span class="line">    TimeFields</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(Blog)</span></span> TableName() <span class="type">string</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;tb_blog&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>Name</code> 和 <code>Icon</code> 不在 <code>tb_blog</code> 表里。</p>
+<p>它们来自用户表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">tb_user.nick_name</span><br><span class="line">tb_user.icon</span><br></pre></td></tr></table></figure>
+
+<p>所以热门博客不是只查博客表，还要补作者信息。</p>
+<h2 id="十七、热门博客-Repository"><a href="#十七、热门博客-Repository" class="headerlink" title="十七、热门博客 Repository"></a>十七、热门博客 Repository</h2><p>Repository：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *blogRepository)</span></span> FindBlogsByHot(ctx context.Context, current <span class="type">int</span>) ([]model.Blog, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> blogs []model.Blog</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> current &lt; <span class="number">1</span> &#123;</span><br><span class="line">        current = <span class="number">1</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">const</span> pageSize = <span class="number">10</span></span><br><span class="line">    offset := (current - <span class="number">1</span>) * pageSize</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Order(<span class="string">&quot;liked DESC&quot;</span>).</span><br><span class="line">        Offset(offset).</span><br><span class="line">        Limit(pageSize).</span><br><span class="line">        Find(&amp;blogs).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> blogs, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>对应 SQL：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> <span class="operator">*</span> <span class="keyword">FROM</span> tb_blog</span><br><span class="line"><span class="keyword">ORDER</span> <span class="keyword">BY</span> liked <span class="keyword">DESC</span></span><br><span class="line">LIMIT <span class="number">10</span> <span class="keyword">OFFSET</span> <span class="number">0</span>;</span><br></pre></td></tr></table></figure>
+
+<p>这里先按点赞数排序。</p>
+<p>后面点赞功能实现后，<code>liked</code> 会随着用户点赞变化，这个热门列表就会更真实。</p>
+<h2 id="十八、给博客补作者昵称和头像"><a href="#十八、给博客补作者昵称和头像" class="headerlink" title="十八、给博客补作者昵称和头像"></a>十八、给博客补作者昵称和头像</h2><p>Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *blogService)</span></span> QueryHotBlog(ctx context.Context, current <span class="type">int</span>, viewerID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    blogs, err := s.blogRepo.FindBlogsByHot(ctx, current)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query hot blog failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> i := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">        user, err := s.userRepo.FindUserByID(ctx, blogs[i].UserID)</span><br><span class="line">        <span class="keyword">if</span> err == <span class="literal">nil</span> &#123;</span><br><span class="line">            blogs[i].Name = user.NickName</span><br><span class="line">            blogs[i].Icon = user.Icon</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(blogs)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里有一个 Go 语言细节非常重要：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">    blogs[i].Name = <span class="string">&quot;xxx&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这样才能修改切片里的原始元素。</p>
+<p>如果写成：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> _, blog := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">    blog.Name = <span class="string">&quot;xxx&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>blog</code> 是副本，改完不会影响 <code>blogs</code>。</p>
+<p>这一阶段只做基础展示，所以不展开 <code>isLike</code>。当前用户是否点赞属于后面的点赞模块。</p>
+<h2 id="十九、博客详情基础查询"><a href="#十九、博客详情基础查询" class="headerlink" title="十九、博客详情基础查询"></a>十九、博客详情基础查询</h2><p>博客详情接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /blog/:id</span><br></pre></td></tr></table></figure>
+
+<p>Repository：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *blogRepository)</span></span> FindBlogByID(ctx context.Context, id <span class="type">int64</span>) (*model.Blog, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> blog model.Blog</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        First(&amp;blog, id).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> &amp;blog, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *blogService)</span></span> QueryByID(ctx context.Context, blogID <span class="type">int64</span>, viewerID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> blogID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid blog id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    blog, err := s.blogRepo.FindBlogByID(ctx, blogID)</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;blog not found&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query blog failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    user, err := s.userRepo.FindUserByID(ctx, blog.UserID)</span><br><span class="line">    <span class="keyword">if</span> err == <span class="literal">nil</span> &#123;</span><br><span class="line">        blog.Name = user.NickName</span><br><span class="line">        blog.Icon = user.Icon</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(blog)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里和热门博客一样，都需要补作者信息。</p>
+<p>区别是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">热门博客：查多条，然后循环补作者</span><br><span class="line">博客详情：查一条，然后补作者</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十、用户基础展示接口"><a href="#二十、用户基础展示接口" class="headerlink" title="二十、用户基础展示接口"></a>二十、用户基础展示接口</h2><p>用户主页会用到两个接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">GET /user/:id</span><br><span class="line">GET /user/info/:id</span><br></pre></td></tr></table></figure>
+
+<p><code>/user/:id</code> 返回用户基本信息：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> UserDTO <span class="keyword">struct</span> &#123;</span><br><span class="line">    ID       <span class="type">int64</span>  <span class="string">`json:&quot;id&quot;`</span></span><br><span class="line">    NickName <span class="type">string</span> <span class="string">`json:&quot;nickName&quot;`</span></span><br><span class="line">    Icon     <span class="type">string</span> <span class="string">`json:&quot;icon&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Service 里要把数据库模型转成 DTO：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *userService)</span></span> QueryUserByID(ctx context.Context, id <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> id &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid user id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    user, err := s.userRepo.FindUserByID(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;user not found&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query user failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    userDTO := dto.UserDTO&#123;</span><br><span class="line">        ID:       user.ID,</span><br><span class="line">        NickName: user.NickName,</span><br><span class="line">        Icon:     user.Icon,</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(userDTO)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>为什么不直接返回 <code>model.User</code>？</p>
+<p>因为 <code>model.User</code> 里可能有：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">phone</span><br><span class="line">password</span><br></pre></td></tr></table></figure>
+
+<p>这些字段不应该暴露给前端。</p>
+<p>这就是 DTO 的价值。</p>
+<h2 id="二十一、用户扩展信息接口"><a href="#二十一、用户扩展信息接口" class="headerlink" title="二十一、用户扩展信息接口"></a>二十一、用户扩展信息接口</h2><p>用户扩展资料表是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">tb_user_info</span><br></pre></td></tr></table></figure>
+
+<p>Repository：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *userRepository)</span></span> FindUserInfoByID(ctx context.Context, id <span class="type">int64</span>) (*model.UserInfo, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> userInfo model.UserInfo</span><br><span class="line"></span><br><span class="line">    res := r.db.WithContext(ctx).</span><br><span class="line">        Where(<span class="string">&quot;user_id = ?&quot;</span>, id).</span><br><span class="line">        Limit(<span class="number">1</span>).</span><br><span class="line">        Find(&amp;userInfo)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> res.Error != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, res.Error</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> res.RowsAffected == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, gorm.ErrRecordNotFound</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> &amp;userInfo, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里用 <code>Find + RowsAffected</code>，可以避免 GORM 在没查到数据时自动打印一堆错误日志。</p>
+<p>Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *userService)</span></span> QueryUserInfo(ctx context.Context, id <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> id &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid user id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    info, err := s.userRepo.FindUserInfoByID(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.OKWithData(&amp;dto.UserInfoDTO&#123;&#125;)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query user info failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    infoDTO := &amp;dto.UserInfoDTO&#123;</span><br><span class="line">        City:      info.City,</span><br><span class="line">        Introduce: info.Introduce,</span><br><span class="line">        Fans:      info.Fans,</span><br><span class="line">        Followee:  info.Followee,</span><br><span class="line">        Gender:    info.Gender,</span><br><span class="line">        Credits:   info.Credits,</span><br><span class="line">        Level:     info.Level,</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> info.Birthday != <span class="literal">nil</span> &#123;</span><br><span class="line">        infoDTO.Birthday = info.Birthday.Format(<span class="string">&quot;2006-01-02&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(infoDTO)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的处理思路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">用户扩展信息不存在，不一定是系统错误</span><br><span class="line">可以返回一个空 DTO，让前端正常渲染默认值</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十二、用户主页博客列表"><a href="#二十二、用户主页博客列表" class="headerlink" title="二十二、用户主页博客列表"></a>二十二、用户主页博客列表</h2><p>用户主页的“笔记”列表会请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /blog/of/user?id=2&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<p>这里的 <code>id=2</code> 表示要看的主页主人。</p>
+<p>Repository：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *blogRepository)</span></span> FindBlogsByUserID(ctx context.Context, userID <span class="type">int64</span>, current <span class="type">int</span>) ([]model.Blog, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> blogs []model.Blog</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> current &lt; <span class="number">1</span> &#123;</span><br><span class="line">        current = <span class="number">1</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">const</span> pageSize = <span class="number">10</span></span><br><span class="line">    offset := (current - <span class="number">1</span>) * pageSize</span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Order(<span class="string">&quot;create_time DESC&quot;</span>).</span><br><span class="line">        Where(<span class="string">&quot;user_id = ?&quot;</span>, userID).</span><br><span class="line">        Offset(offset).</span><br><span class="line">        Limit(pageSize).</span><br><span class="line">        Find(&amp;blogs).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> blogs, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这一阶段只需要查这个用户发布过哪些博客。</p>
+<p>有些页面里每条博客旁边没有显示作者昵称和头像，因为顶部已经显示了主页主人的头像和昵称。这是前端页面设计决定的。</p>
+<p>但是后端模型里保留 <code>Name</code>、<code>Icon</code> 字段仍然有价值：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">首页热门博客需要显示作者信息</span><br><span class="line">博客详情需要显示作者信息</span><br><span class="line">同一个 Blog 结构体可以复用</span><br></pre></td></tr></table></figure>
+
+<p>接口不一定每个页面都用到所有字段。后端可以按页面需要逐步补齐。</p>
+<h2 id="二十三、这一阶段的路由关系"><a href="#二十三、这一阶段的路由关系" class="headerlink" title="二十三、这一阶段的路由关系"></a>二十三、这一阶段的路由关系</h2><p>这一阶段主要涉及这些公开接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">GET /shop-type/list</span><br><span class="line">GET /shop/of/type</span><br><span class="line">GET /shop/of/name</span><br><span class="line">GET /shop/:id</span><br><span class="line">GET /voucher/list/:shopId</span><br><span class="line">GET /blog/hot</span><br><span class="line">GET /blog/:id</span><br><span class="line">GET /blog/of/user</span><br><span class="line">GET /user/:id</span><br><span class="line">GET /user/info/:id</span><br></pre></td></tr></table></figure>
+
+<p>这些接口不需要登录也能访问。</p>
+<p>因为游客打开首页、看店铺、看博客详情都是正常行为。</p>
+<p>后面登录、点赞、关注、发布笔记、秒杀下单才需要再加登录拦截。</p>
+<h2 id="二十四、测试顺序"><a href="#二十四、测试顺序" class="headerlink" title="二十四、测试顺序"></a>二十四、测试顺序</h2><p>建议按页面路径测试，而不是乱测。</p>
+<p>第一步，首页分类：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop-type/list</span><br></pre></td></tr></table></figure>
+
+<p>第二步，点击分类后的店铺列表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop/of/type?typeId=1&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<p>第三步，搜索店铺：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop/of/name?name=KTV&amp;current=1</span><br></pre></td></tr></table></figure>
+
+<p>第四步，店铺详情：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop/1</span><br></pre></td></tr></table></figure>
+
+<p>第五步，店铺优惠券：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/voucher/list/1</span><br></pre></td></tr></table></figure>
+
+<p>第六步，首页热门博客：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/blog/hot?current=1</span><br></pre></td></tr></table></figure>
+
+<p>第七步，博客详情：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/blog/1</span><br></pre></td></tr></table></figure>
+
+<p>第八步，用户信息：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/user/2</span><br><span class="line">http://127.0.0.1:8081/user/info/2</span><br></pre></td></tr></table></figure>
+
+<p>最后再刷新前端：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8080</span><br></pre></td></tr></table></figure>
+
+<p>如果每个接口都返回：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> ...</span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>页面就会一点点亮起来。</p>
+<h2 id="二十五、这一阶段最容易踩的坑"><a href="#二十五、这一阶段最容易踩的坑" class="headerlink" title="二十五、这一阶段最容易踩的坑"></a>二十五、这一阶段最容易踩的坑</h2><h3 id="1-只看数据库，不看接口返回"><a href="#1-只看数据库，不看接口返回" class="headerlink" title="1. 只看数据库，不看接口返回"></a>1. 只看数据库，不看接口返回</h3><p>数据库有数据不等于前端能显示。</p>
+<p>前端真正看的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">success 是否为 true</span><br><span class="line">data 是否有值</span><br><span class="line">字段名是否符合预期</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-JSON-字段名和数据库字段名混淆"><a href="#2-JSON-字段名和数据库字段名混淆" class="headerlink" title="2. JSON 字段名和数据库字段名混淆"></a>2. JSON 字段名和数据库字段名混淆</h3><p>数据库里是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">type_id</span><br><span class="line">avg_price</span><br><span class="line">open_hours</span><br></pre></td></tr></table></figure>
+
+<p>前端要的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">typeId</span><br><span class="line">avgPrice</span><br><span class="line">openHours</span><br></pre></td></tr></table></figure>
+
+<p>所以 model 标签要认真写。</p>
+<h3 id="3-Handler-写太多业务"><a href="#3-Handler-写太多业务" class="headerlink" title="3. Handler 写太多业务"></a>3. Handler 写太多业务</h3><p>Handler 一旦开始查数据库、拼字段，很快会变乱。</p>
+<p>更清晰的写法是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Handler 解析参数</span><br><span class="line">Service 组织业务</span><br><span class="line">Repository 查询数据库</span><br></pre></td></tr></table></figure>
+
+<h3 id="4-分页参数要兜底"><a href="#4-分页参数要兜底" class="headerlink" title="4. 分页参数要兜底"></a>4. 分页参数要兜底</h3><p>前端可能不传 <code>current</code>，也可能传错。</p>
+<p>所以要兜底：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> current &lt; <span class="number">1</span> &#123;</span><br><span class="line">    current = <span class="number">1</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="5-修改切片元素要用下标"><a href="#5-修改切片元素要用下标" class="headerlink" title="5. 修改切片元素要用下标"></a>5. 修改切片元素要用下标</h3><p>补充博客作者信息时要写：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">    blogs[i].Name = user.NickName</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>不要写：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> _, blog := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">    blog.Name = user.NickName</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>后者改的是副本。</p>
+<h2 id="二十六、为什么这一阶段还不用-Redis"><a href="#二十六、为什么这一阶段还不用-Redis" class="headerlink" title="二十六、为什么这一阶段还不用 Redis"></a>二十六、为什么这一阶段还不用 Redis</h2><p>店铺分类、店铺详情这些接口非常适合用 Redis 优化。</p>
+<p>但我没有一开始就上 Redis，原因是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">先确认 MySQL 查询是正确的</span><br><span class="line">先确认返回字段能被前端渲染</span><br><span class="line">先把 Handler-Service-Repository 链路跑熟</span><br></pre></td></tr></table></figure>
+
+<p>如果一上来就加缓存，出了问题很难判断：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">是 MySQL 查错了？</span><br><span class="line">是 Redis key 错了？</span><br><span class="line">是 JSON 反序列化错了？</span><br><span class="line">还是前端字段不匹配？</span><br></pre></td></tr></table></figure>
+
+<p>所以正确节奏是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">第一步：MySQL 直查跑通</span><br><span class="line">第二步：加 Redis 缓存</span><br><span class="line">第三步：处理缓存穿透、击穿、雪崩</span><br><span class="line">第四步：处理数据更新时的缓存一致性</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十七、后面如何用-Redis-优化"><a href="#二十七、后面如何用-Redis-优化" class="headerlink" title="二十七、后面如何用 Redis 优化"></a>二十七、后面如何用 Redis 优化</h2><p>后续可以从三个地方开始优化。</p>
+<p>第一，店铺分类缓存。</p>
+<p>分类列表变化很少，适合缓存成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cache:shopType</span><br></pre></td></tr></table></figure>
+
+<p>流程：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">先查 Redis</span><br><span class="line">命中就直接返回</span><br><span class="line">未命中查 MySQL</span><br><span class="line">查到后写回 Redis</span><br></pre></td></tr></table></figure>
+
+<p>第二，店铺详情缓存。</p>
+<p>店铺详情访问频率高，适合缓存成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cache:shop:&#123;id&#125;</span><br></pre></td></tr></table></figure>
+
+<p>但这里会引出几个经典问题：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">缓存穿透：查不存在的店铺 id</span><br><span class="line">缓存击穿：热点店铺 key 过期</span><br><span class="line">缓存雪崩：大量 key 同时过期</span><br><span class="line">缓存一致性：更新店铺后怎么删除缓存</span><br></pre></td></tr></table></figure>
+
+<p>第三，附近店铺 GEO 查询。</p>
+<p>现在 <code>/shop/of/type</code> 只是按分类分页。</p>
+<p>后续如果加入经纬度，就可以用 Redis GEO 做附近商铺：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">GEOADD</span><br><span class="line">GEOSEARCH</span><br></pre></td></tr></table></figure>
+
+<p>把用户当前位置附近的店铺按距离返回，并把距离填到 <code>Shop.Distance</code>。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>这一阶段我没有急着写高并发、登录、点赞这些更复杂的功能，而是先让前端页面能靠 MySQL 数据跑起来。</p>
+<p>完成的核心接口包括：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">店铺分类列表</span><br><span class="line">分类店铺列表</span><br><span class="line">店铺名称搜索</span><br><span class="line">店铺详情</span><br><span class="line">店铺优惠券列表</span><br><span class="line">热门博客</span><br><span class="line">博客详情</span><br><span class="line">用户基础信息</span><br><span class="line">用户主页博客列表</span><br></pre></td></tr></table></figure>
+
+<p>这一步的价值在于：我真正跑通了从前端到数据库的完整链路。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">前端请求 -&gt; Gin Handler -&gt; Service -&gt; Repository -&gt; GORM -&gt; MySQL -&gt; Result -&gt; 前端渲染</span><br></pre></td></tr></table></figure>
+
+<p>等这些基础查询稳定后，再引入 Redis 才更容易理解每一种优化到底解决了什么问题。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/20/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9AMySQL%E6%89%93%E9%80%9A%E9%A6%96%E9%A1%B5%E5%BA%97%E9%93%BA%E4%B8%8E%E8%AF%A6%E6%83%85%E5%9F%BA%E7%A1%80%E6%9F%A5%E8%AF%A2/" data-id="cuidnGky5KIkk2L0jRm4PIfP0" data-title="Go 版黑马点评：用 MySQL 打通首页、店铺列表与详情页" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" rel="tag">首页接口</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/06/21/go-hmdp-login-token-middleware/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          Go 版黑马点评：登录、Token 与双层拦截器
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/06/19/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E4%BB%8E%E9%9B%B6%E6%90%AD%E5%BB%BA%E5%90%8E%E7%AB%AF%E9%A1%B9%E7%9B%AE%E9%AA%A8%E6%9E%B6/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">Go 版黑马点评：从零搭建后端项目骨架</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/Redis/">Redis</a></li></ul></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" rel="tag">后端架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" rel="tag">短信登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" rel="tag">项目架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" rel="tag">首页接口</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/GORM/" style="font-size: 16.67px;">GORM</a> <a href="/tags/Gin/" style="font-size: 20px;">Gin</a> <a href="/tags/MySQL/" style="font-size: 10px;">MySQL</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Viper/" style="font-size: 13.33px;">Viper</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">后端架构</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a> <a href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" style="font-size: 10px;">短信登录</a> <a href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">项目架构</a> <a href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" style="font-size: 10px;">首页接口</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-blog-like-zset/">Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-login-token-middleware/">Go 版黑马点评：登录、Token 与双层拦截器</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/20/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9AMySQL%E6%89%93%E9%80%9A%E9%A6%96%E9%A1%B5%E5%BA%97%E9%93%BA%E4%B8%8E%E8%AF%A6%E6%83%85%E5%9F%BA%E7%A1%80%E6%9F%A5%E8%AF%A2/">Go 版黑马点评：用 MySQL 打通首页、店铺列表与详情页</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/19/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E4%BB%8E%E9%9B%B6%E6%90%AD%E5%BB%BA%E5%90%8E%E7%AB%AF%E9%A1%B9%E7%9B%AE%E9%AA%A8%E6%9E%B6/">Go 版黑马点评：从零搭建后端项目骨架</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/18/Go%E4%B8%8ERedis%E5%AE%9E%E6%88%98%EF%BC%9A%E5%AE%9E%E7%8E%B0%E9%AB%98%E5%B9%B6%E5%8F%91%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95%E4%B8%8E%E8%87%AA%E5%8A%A8%E6%B3%A8%E5%86%8C/">Go与Redis实战：从零搭建黑马点评后端到短信登录与自动注册</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 一点甜a<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
