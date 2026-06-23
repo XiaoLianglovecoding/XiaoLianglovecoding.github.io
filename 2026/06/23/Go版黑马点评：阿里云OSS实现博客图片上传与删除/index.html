@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除 | 我的Golang学习博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="今天除了 Feed 流，我还把发布博客时的图片上传从本地存储改成了阿里云 OSS。 一开始上传后页面出现了图片框，但图片裂开。排查后发现不是上传接口完全失败，而是“后端返回值、前端拼接规则、nginx 代理路径、OSS objectName”没有对齐。 这篇文章记录这块从问题排查到最终修复的完整过程。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除">
+<meta property="og:url" content="http://example.com/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/index.html">
+<meta property="og:site_name" content="我的Golang学习博客">
+<meta property="og:description" content="今天除了 Feed 流，我还把发布博客时的图片上传从本地存储改成了阿里云 OSS。 一开始上传后页面出现了图片框，但图片裂开。排查后发现不是上传接口完全失败，而是“后端返回值、前端拼接规则、nginx 代理路径、OSS objectName”没有对齐。 这篇文章记录这块从问题排查到最终修复的完整过程。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-23T13:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-23T13:22:30.321Z">
+<meta property="article:author" content="一点甜a">
+<meta property="article:tag" content="Gin">
+<meta property="article:tag" content="Nginx">
+<meta property="article:tag" content="OSS">
+<meta property="article:tag" content="文件上传">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">我的Golang学习博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">记录用Golang+Redis实现大众点评与学习思考</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-Go版黑马点评：阿里云OSS实现博客图片上传与删除" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/" class="article-date">
+  <time class="dt-published" datetime="2026-06-23T13:00:00.000Z" itemprop="datePublished">2026-06-23</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>今天除了 Feed 流，我还把发布博客时的图片上传从本地存储改成了阿里云 OSS。</p>
+<p>一开始上传后页面出现了图片框，但图片裂开。排查后发现不是上传接口完全失败，而是“后端返回值、前端拼接规则、nginx 代理路径、OSS objectName”没有对齐。</p>
+<p>这篇文章记录这块从问题排查到最终修复的完整过程。</p>
+<span id="more"></span>
+
+<h2 id="一、发布博客图片上传的前端流程"><a href="#一、发布博客图片上传的前端流程" class="headerlink" title="一、发布博客图片上传的前端流程"></a>一、发布博客图片上传的前端流程</h2><p>黑马点评前端上传图片时，代码在 <code>blog-edit.html</code>。</p>
+<p>核心逻辑：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">fileSelected</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">let</span> file = <span class="variable language_">this</span>.<span class="property">$refs</span>.<span class="property">fileInput</span>.<span class="property">files</span>[<span class="number">0</span>];</span><br><span class="line">  <span class="keyword">let</span> formData = <span class="keyword">new</span> <span class="title class_">FormData</span>();</span><br><span class="line">  formData.<span class="title function_">append</span>(<span class="string">&quot;file&quot;</span>, file);</span><br><span class="line">  <span class="keyword">const</span> config = &#123;</span><br><span class="line">    <span class="attr">headers</span>: &#123;<span class="string">&quot;Content-Type&quot;</span>: <span class="string">&quot;multipart/form-data;boundary=&quot;</span> + <span class="keyword">new</span> <span class="title class_">Date</span>().<span class="title function_">getTime</span>()&#125;</span><br><span class="line">  &#125;;</span><br><span class="line">  axios</span><br><span class="line">    .<span class="title function_">post</span>(<span class="string">&quot;/upload/blog&quot;</span>, formData, config)</span><br><span class="line">    .<span class="title function_">then</span>(<span class="function">(<span class="params">&#123;data&#125;</span>) =&gt;</span> <span class="variable language_">this</span>.<span class="property">fileList</span>.<span class="title function_">push</span>(<span class="string">&#x27;/imgs&#x27;</span> + data))</span><br><span class="line">    .<span class="title function_">catch</span>(<span class="variable language_">this</span>.<span class="property">$message</span>.<span class="property">error</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里最重要的一行是：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">this</span>.<span class="property">fileList</span>.<span class="title function_">push</span>(<span class="string">&#x27;/imgs&#x27;</span> + data)</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，前端假设后端返回的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/blogs/xxx.jpg</span><br></pre></td></tr></table></figure>
+
+<p>然后前端自己拼成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgs/blogs/xxx.jpg</span><br></pre></td></tr></table></figure>
+
+<p>这和 Java 版后端的约定是一致的。</p>
+<h2 id="二、Java-版为什么不用改前端"><a href="#二、Java-版为什么不用改前端" class="headerlink" title="二、Java 版为什么不用改前端"></a>二、Java 版为什么不用改前端</h2><p>Java 版上传接口返回的是类似：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/blogs/7/14/uuid.jpg</span><br></pre></td></tr></table></figure>
+
+<p>前端拼接后：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgs/blogs/7/14/uuid.jpg</span><br></pre></td></tr></table></figure>
+
+<p>nginx 再从本地静态目录中读取图片。</p>
+<p>也就是说，Java 版能直接用，不是因为前端不需要配合，而是因为 Java 后端返回值刚好符合前端原来的约定。</p>
+<p>Go 版如果直接返回完整 OSS URL：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://bucket.oss-cn-beijing.aliyuncs.com/blogs/xxx.jpg</span><br></pre></td></tr></table></figure>
+
+<p>前端仍然会拼上 <code>/imgs</code>，最终变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgshttps://bucket.oss-cn-beijing.aliyuncs.com/blogs/xxx.jpg</span><br></pre></td></tr></table></figure>
+
+<p>这当然会裂图。</p>
+<h2 id="三、从-nginx-日志定位问题"><a href="#三、从-nginx-日志定位问题" class="headerlink" title="三、从 nginx 日志定位问题"></a>三、从 nginx 日志定位问题</h2><p>当时 nginx 日志里出现了这样的请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /imgshttps://xxx.oss-cn-beijing.aliyuncs.com/hmdp/blogs/2026/06/23/xxx.jpg</span><br></pre></td></tr></table></figure>
+
+<p>错误日志里也能看到 nginx 试图把它当成本地文件路径：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">CreateFile() &quot;.../html/hmdp/imgshttps:/xxx.oss-cn-beijing.aliyuncs.com/...&quot; failed</span><br></pre></td></tr></table></figure>
+
+<p>这说明问题不在图片是否上传成功，而在前端最终生成的图片地址是错的。</p>
+<p>根因就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Go 后端返回完整 URL</span><br><span class="line">前端又拼了 /imgs</span><br></pre></td></tr></table></figure>
+
+<p>所以修复方式不是先改 OSS，而是先让 Go 后端继续返回 Java 同款路径：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/blogs/xxx.jpg</span><br></pre></td></tr></table></figure>
+
+<h2 id="四、最终采用的路径约定"><a href="#四、最终采用的路径约定" class="headerlink" title="四、最终采用的路径约定"></a>四、最终采用的路径约定</h2><p>为了不改前端，我采用这个约定：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">OSS objectName:</span><br><span class="line">blogs/2026/06/23/uuid.jpg</span><br><span class="line"></span><br><span class="line">Go 后端返回给前端:</span><br><span class="line">/blogs/2026/06/23/uuid.jpg</span><br><span class="line"></span><br><span class="line">前端保存:</span><br><span class="line">/imgs/blogs/2026/06/23/uuid.jpg</span><br><span class="line"></span><br><span class="line">nginx 代理到 OSS:</span><br><span class="line">https://bucket.oss-cn-beijing.aliyuncs.com/blogs/2026/06/23/uuid.jpg</span><br></pre></td></tr></table></figure>
+
+<p>这一套路径必须完全对齐。</p>
+<p>只要其中一个地方多了 <code>hmdp/</code> 或少了 <code>/imgs</code>，图片就会裂。</p>
+<h2 id="五、OSS-配置"><a href="#五、OSS-配置" class="headerlink" title="五、OSS 配置"></a>五、OSS 配置</h2><p>配置文件中增加 OSS 配置。</p>
+<p>注意：博客里不要写真实 AccessKey，这里用占位符。</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">oss:</span></span><br><span class="line">  <span class="attr">endpoint:</span> <span class="string">oss-cn-beijing.aliyuncs.com</span></span><br><span class="line">  <span class="attr">bucket:</span> <span class="string">your-bucket-name</span></span><br><span class="line">  <span class="attr">accessKeyId:</span> <span class="string">$&#123;OSS_ACCESS_KEY_ID&#125;</span></span><br><span class="line">  <span class="attr">accessKeySecret:</span> <span class="string">$&#123;OSS_ACCESS_KEY_SECRET&#125;</span></span><br><span class="line">  <span class="attr">publicHost:</span> <span class="string">https://your-bucket-name.oss-cn-beijing.aliyuncs.com</span></span><br><span class="line">  <span class="attr">dir:</span> <span class="string">blogs</span></span><br></pre></td></tr></table></figure>
+
+<p>这里 <code>dir</code> 必须是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blogs</span><br></pre></td></tr></table></figure>
+
+<p>因为 nginx 配的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgs/blogs/ -&gt; OSS /blogs/</span><br></pre></td></tr></table></figure>
+
+<p>如果配置成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hmdp/blogs</span><br></pre></td></tr></table></figure>
+
+<p>前端最终会请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgs/hmdp/blogs/...</span><br></pre></td></tr></table></figure>
+
+<p>就匹配不上 nginx 的 <code>/imgs/blogs/</code> 代理。</p>
+<h2 id="六、配置结构体"><a href="#六、配置结构体" class="headerlink" title="六、配置结构体"></a>六、配置结构体</h2><p>Go 里增加配置结构体：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Config <span class="keyword">struct</span> &#123;</span><br><span class="line">    Server ServerConfig <span class="string">`mapstructure:&quot;server&quot;`</span></span><br><span class="line">    MySQL  MySQLConfig  <span class="string">`mapstructure:&quot;mysql&quot;`</span></span><br><span class="line">    Redis  RedisConfig  <span class="string">`mapstructure:&quot;redis&quot;`</span></span><br><span class="line">    OSS    OSSConfig    <span class="string">`mapstructure:&quot;oss&quot;`</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> OSSConfig <span class="keyword">struct</span> &#123;</span><br><span class="line">    Endpoint        <span class="type">string</span> <span class="string">`mapstructure:&quot;endpoint&quot;`</span></span><br><span class="line">    Bucket          <span class="type">string</span> <span class="string">`mapstructure:&quot;bucket&quot;`</span></span><br><span class="line">    AccessKeyID     <span class="type">string</span> <span class="string">`mapstructure:&quot;accessKeyId&quot;`</span></span><br><span class="line">    AccessKeySecret <span class="type">string</span> <span class="string">`mapstructure:&quot;accessKeySecret&quot;`</span></span><br><span class="line">    PublicHost      <span class="type">string</span> <span class="string">`mapstructure:&quot;publicHost&quot;`</span></span><br><span class="line">    Dir             <span class="type">string</span> <span class="string">`mapstructure:&quot;dir&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>配置读取仍然由 Viper 完成：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> cfg Config</span><br><span class="line"><span class="keyword">if</span> err := v.Unmarshal(&amp;cfg); err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">nil</span>, fmt.Errorf(<span class="string">&quot;unmarshal config: %w&quot;</span>, err)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="七、UploadService-注入-OSS-配置"><a href="#七、UploadService-注入-OSS-配置" class="headerlink" title="七、UploadService 注入 OSS 配置"></a>七、UploadService 注入 OSS 配置</h2><p>上传 Service 需要 OSS 配置：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> uploadService <span class="keyword">struct</span> &#123;</span><br><span class="line">    ossCfg config.OSSConfig</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewUploadService</span><span class="params">(ossCfg config.OSSConfig)</span></span> UploadService &#123;</span><br><span class="line">    <span class="keyword">return</span> &amp;uploadService&#123;ossCfg: ossCfg&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在统一创建 Service 的地方传入：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Upload: NewUploadService(cfg.OSS),</span><br></pre></td></tr></table></figure>
+
+<p>这样上传代码就能拿到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">endpoint</span><br><span class="line">bucket</span><br><span class="line">accessKey</span><br><span class="line">上传目录</span><br></pre></td></tr></table></figure>
+
+<h2 id="八、上传-Handler"><a href="#八、上传-Handler" class="headerlink" title="八、上传 Handler"></a>八、上传 Handler</h2><p>Handler 层负责从 multipart 请求里取文件：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *UploadHandler)</span></span> UploadBlog(c *gin.Context) &#123;</span><br><span class="line">    file, err := c.FormFile(<span class="string">&quot;file&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        writeResult(c, result.Fail(<span class="string">&quot;missing upload file&quot;</span>))</span><br><span class="line">        <span class="keyword">return</span></span><br><span class="line">    &#125;</span><br><span class="line">    writeResult(c, h.uploadService.UploadBlogImage(c.Request.Context(), file))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的 <code>&quot;file&quot;</code> 要和前端一致。</p>
+<p>前端是：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">formData.<span class="title function_">append</span>(<span class="string">&quot;file&quot;</span>, file);</span><br></pre></td></tr></table></figure>
+
+<p>所以后端必须写：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">c.FormFile(<span class="string">&quot;file&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<h2 id="九、上传前的基本校验"><a href="#九、上传前的基本校验" class="headerlink" title="九、上传前的基本校验"></a>九、上传前的基本校验</h2><p>上传 Service 先做基础校验：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> file == <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;missing upload file&quot;</span>)</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> file.Size &gt; <span class="number">5</span>*<span class="number">1024</span>*<span class="number">1024</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;图片不能超过 5MB&quot;</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">contentType := file.Header.Get(<span class="string">&quot;Content-Type&quot;</span>)</span><br><span class="line"><span class="keyword">if</span> !strings.HasPrefix(contentType, <span class="string">&quot;image/&quot;</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;只能上传图片&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里校验了两件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">文件大小不能超过 5MB</span><br><span class="line">Content-Type 必须是 image/</span><br></pre></td></tr></table></figure>
+
+<p>前面 nginx 也要配：</p>
+<figure class="highlight nginx"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="attribute">client_max_body_size</span> <span class="number">10m</span>;</span><br></pre></td></tr></table></figure>
+
+<p>否则大图可能在到达 Go 后端之前就被 nginx 拦截。</p>
+<h2 id="十、生成-OSS-objectName"><a href="#十、生成-OSS-objectName" class="headerlink" title="十、生成 OSS objectName"></a>十、生成 OSS objectName</h2><p>上传到 OSS 时需要一个 objectName。</p>
+<p>当前生成方式：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">buildOSSObjectName</span><span class="params">(dir <span class="type">string</span>, ext <span class="type">string</span>)</span></span> <span class="type">string</span> &#123;</span><br><span class="line">    prefix := strings.Trim(dir, <span class="string">&quot;/&quot;</span>)</span><br><span class="line">    datePath := time.Now().Format(<span class="string">&quot;2006/01/02&quot;</span>)</span><br><span class="line">    fileName := uuid.New().String() + ext</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> prefix == <span class="string">&quot;&quot;</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> fmt.Sprintf(<span class="string">&quot;%s/%s&quot;</span>, datePath, fileName)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> fmt.Sprintf(<span class="string">&quot;%s/%s/%s&quot;</span>, prefix, datePath, fileName)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>如果配置：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dir = blogs</span><br></pre></td></tr></table></figure>
+
+<p>生成结果类似：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blogs/2026/06/23/5339eadd-7ead-4880-af7d-66a3134cfd93.jpg</span><br></pre></td></tr></table></figure>
+
+<p>这就是 OSS 上的真实对象路径。</p>
+<p>用日期目录有两个好处：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">1. 文件不会全部堆在同一个目录</span><br><span class="line">2. 排查问题时能根据日期快速定位</span><br></pre></td></tr></table></figure>
+
+<h2 id="十一、上传到-OSS"><a href="#十一、上传到-OSS" class="headerlink" title="十一、上传到 OSS"></a>十一、上传到 OSS</h2><p>核心上传代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">client, err := oss.New(</span><br><span class="line">    s.ossCfg.Endpoint,</span><br><span class="line">    s.ossCfg.AccessKeyID,</span><br><span class="line">    s.ossCfg.AccessKeySecret,</span><br><span class="line">)</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;连接 OSS 失败&quot;</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">bucket, err := client.Bucket(s.ossCfg.Bucket)</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;获取 OSS Bucket 失败&quot;</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = bucket.PutObject(</span><br><span class="line">    objectName,</span><br><span class="line">    src,</span><br><span class="line">    oss.ContentType(contentType),</span><br><span class="line">)</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;上传图片到 OSS 失败&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里用的是阿里云 OSS Go SDK：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">github.com/aliyun/aliyun-oss-<span class="keyword">go</span>-sdk/oss</span><br></pre></td></tr></table></figure>
+
+<p>上传的是文件流：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">src, err := file.Open()</span><br><span class="line"><span class="keyword">defer</span> src.Close()</span><br></pre></td></tr></table></figure>
+
+<p>不需要先保存到本地，再上传 OSS。</p>
+<h2 id="十二、为什么返回-blogs-…-而不是完整-URL"><a href="#十二、为什么返回-blogs-…-而不是完整-URL" class="headerlink" title="十二、为什么返回 &#x2F;blogs&#x2F;… 而不是完整 URL"></a>十二、为什么返回 &#x2F;blogs&#x2F;… 而不是完整 URL</h2><p>最终返回：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">return</span> result.OKWithData(<span class="string">&quot;/&quot;</span> + objectName)</span><br></pre></td></tr></table></figure>
+
+<p>如果 objectName 是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>返回给前端就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>前端自动拼接：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&#x27;/imgs&#x27;</span> + data</span><br></pre></td></tr></table></figure>
+
+<p>最终得到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgs/blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>这就和 Java 版兼容了。</p>
+<p>这也是这次修复的核心。</p>
+<h2 id="十三、UploadBlogImage-完整代码"><a href="#十三、UploadBlogImage-完整代码" class="headerlink" title="十三、UploadBlogImage 完整代码"></a>十三、UploadBlogImage 完整代码</h2><p>完整上传逻辑：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *uploadService)</span></span> UploadBlogImage(ctx context.Context, file *multipart.FileHeader) result.Result &#123;</span><br><span class="line">    _ = ctx</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> file == <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;missing upload file&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> file.Size &gt; <span class="number">5</span>*<span class="number">1024</span>*<span class="number">1024</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;图片不能超过 5MB&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    contentType := file.Header.Get(<span class="string">&quot;Content-Type&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> !strings.HasPrefix(contentType, <span class="string">&quot;image/&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;只能上传图片&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    src, err := file.Open()</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;读取上传文件失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">defer</span> src.Close()</span><br><span class="line"></span><br><span class="line">    ext := strings.ToLower(filepath.Ext(file.Filename))</span><br><span class="line">    <span class="keyword">if</span> ext == <span class="string">&quot;&quot;</span> &#123;</span><br><span class="line">        ext = <span class="string">&quot;.jpg&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    objectName := buildOSSObjectName(s.ossCfg.Dir, ext)</span><br><span class="line"></span><br><span class="line">    client, err := oss.New(</span><br><span class="line">        s.ossCfg.Endpoint,</span><br><span class="line">        s.ossCfg.AccessKeyID,</span><br><span class="line">        s.ossCfg.AccessKeySecret,</span><br><span class="line">    )</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;连接 OSS 失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bucket, err := client.Bucket(s.ossCfg.Bucket)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;获取 OSS Bucket 失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    err = bucket.PutObject(</span><br><span class="line">        objectName,</span><br><span class="line">        src,</span><br><span class="line">        oss.ContentType(contentType),</span><br><span class="line">    )</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;上传图片到 OSS 失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(<span class="string">&quot;/&quot;</span> + objectName)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="十四、nginx-代理-OSS-图片"><a href="#十四、nginx-代理-OSS-图片" class="headerlink" title="十四、nginx 代理 OSS 图片"></a>十四、nginx 代理 OSS 图片</h2><p>前端最终访问的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgs/blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>nginx 要把它代理到 OSS：</p>
+<figure class="highlight nginx"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="section">location</span> /imgs/blogs/ &#123;</span><br><span class="line">    <span class="attribute">proxy_ssl_server_name</span> <span class="literal">on</span>;</span><br><span class="line">    <span class="attribute">proxy_set_header</span> Host your-bucket-name.oss-cn-beijing.aliyuncs.com;</span><br><span class="line">    <span class="attribute">proxy_pass</span> https://your-bucket-name.oss-cn-beijing.aliyuncs.com/blogs/;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里路径转换是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">浏览器:</span><br><span class="line">/imgs/blogs/2026/06/23/a.jpg</span><br><span class="line"></span><br><span class="line">OSS:</span><br><span class="line">/blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>所以 <code>proxy_pass</code> 后面必须是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">.../blogs/</span><br></pre></td></tr></table></figure>
+
+<p>不要多写成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">.../hmdp/blogs/</span><br></pre></td></tr></table></figure>
+
+<p>除非你的 objectName 真的以 <code>hmdp/blogs</code> 开头。</p>
+<h2 id="十五、删除图片接口"><a href="#十五、删除图片接口" class="headerlink" title="十五、删除图片接口"></a>十五、删除图片接口</h2><p>前端删除图片时：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">axios.<span class="title function_">get</span>(<span class="string">&quot;/upload/blog/delete?name=&quot;</span> + <span class="variable language_">this</span>.<span class="property">fileList</span>[i])</span><br></pre></td></tr></table></figure>
+
+<p>此时 <code>this.fileList[i]</code> 是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgs/blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>但 OSS 删除需要的是 objectName：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>所以后端要做一次路径归一化。</p>
+<p>Handler：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *UploadHandler)</span></span> DeleteBlog(c *gin.Context) &#123;</span><br><span class="line">    name := c.Query(<span class="string">&quot;name&quot;</span>)</span><br><span class="line">    writeResult(c, h.uploadService.DeleteBlogImage(c.Request.Context(), name))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *uploadService)</span></span> DeleteBlogImage(ctx context.Context, name <span class="type">string</span>) result.Result &#123;</span><br><span class="line">    _ = ctx</span><br><span class="line"></span><br><span class="line">    objectName := normalizeBlogObjectName(name, s.ossCfg)</span><br><span class="line">    <span class="keyword">if</span> objectName == <span class="string">&quot;&quot;</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;非法图片路径&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    client, err := oss.New(</span><br><span class="line">        s.ossCfg.Endpoint,</span><br><span class="line">        s.ossCfg.AccessKeyID,</span><br><span class="line">        s.ossCfg.AccessKeySecret,</span><br><span class="line">    )</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;连接 OSS 失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bucket, err := client.Bucket(s.ossCfg.Bucket)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;获取 OSS Bucket 失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err := bucket.DeleteObject(objectName); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;删除 OSS 图片失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OK()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="十六、路径归一化和安全校验"><a href="#十六、路径归一化和安全校验" class="headerlink" title="十六、路径归一化和安全校验"></a>十六、路径归一化和安全校验</h2><p>归一化方法：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">normalizeBlogObjectName</span><span class="params">(name <span class="type">string</span>, cfg config.OSSConfig)</span></span> <span class="type">string</span> &#123;</span><br><span class="line">    objectName := strings.TrimSpace(name)</span><br><span class="line">    <span class="keyword">if</span> objectName == <span class="string">&quot;&quot;</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    publicPrefix := strings.TrimRight(cfg.PublicHost, <span class="string">&quot;/&quot;</span>) + <span class="string">&quot;/&quot;</span></span><br><span class="line">    objectName = strings.TrimPrefix(objectName, publicPrefix)</span><br><span class="line">    objectName = strings.TrimPrefix(objectName, <span class="string">&quot;/imgs/&quot;</span>)</span><br><span class="line">    objectName = strings.TrimPrefix(objectName, <span class="string">&quot;imgs/&quot;</span>)</span><br><span class="line">    objectName = strings.TrimPrefix(objectName, <span class="string">&quot;/&quot;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> strings.Contains(objectName, <span class="string">&quot;..&quot;</span>) || strings.Contains(objectName, <span class="string">&quot;\\&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    dir := strings.Trim(cfg.Dir, <span class="string">&quot;/&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> dir != <span class="string">&quot;&quot;</span> &amp;&amp; objectName != dir &amp;&amp; !strings.HasPrefix(objectName, dir+<span class="string">&quot;/&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> objectName</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>它能处理几种输入：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/imgs/blogs/2026/06/23/a.jpg</span><br><span class="line">imgs/blogs/2026/06/23/a.jpg</span><br><span class="line">/blogs/2026/06/23/a.jpg</span><br><span class="line">https://bucket.oss-cn-beijing.aliyuncs.com/blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>最终都尽量转成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blogs/2026/06/23/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>同时拒绝：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">../</span><br><span class="line">反斜杠路径</span><br><span class="line">非 blogs/ 开头的路径</span><br></pre></td></tr></table></figure>
+
+<p>避免用户通过接口删除不该删的 OSS 对象。</p>
+<h2 id="十七、这次裂图的根因总结"><a href="#十七、这次裂图的根因总结" class="headerlink" title="十七、这次裂图的根因总结"></a>十七、这次裂图的根因总结</h2><p>这次上传后裂图，不是单点 bug，而是路径约定没统一。</p>
+<p>错误版本：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Go 返回完整 URL:</span><br><span class="line">https://bucket.oss-cn-beijing.aliyuncs.com/hmdp/blogs/a.jpg</span><br><span class="line"></span><br><span class="line">前端拼 /imgs:</span><br><span class="line">/imgshttps://bucket.oss-cn-beijing.aliyuncs.com/hmdp/blogs/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>正确版本：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">Go 返回:</span><br><span class="line">/blogs/a.jpg</span><br><span class="line"></span><br><span class="line">前端拼:</span><br><span class="line">/imgs/blogs/a.jpg</span><br><span class="line"></span><br><span class="line">nginx 代理:</span><br><span class="line">https://bucket.oss-cn-beijing.aliyuncs.com/blogs/a.jpg</span><br></pre></td></tr></table></figure>
+
+<p>所以关键不是“OSS 能不能访问”，而是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">后端返回值必须符合前端约定</span><br><span class="line">nginx 代理路径必须符合 OSS objectName</span><br></pre></td></tr></table></figure>
+
+<h2 id="十八、测试流程"><a href="#十八、测试流程" class="headerlink" title="十八、测试流程"></a>十八、测试流程</h2><p>测试时按这个顺序。</p>
+<p>第一步，启动 Go 后端。</p>
+<p>第二步，检查 nginx 配置：</p>
+<figure class="highlight powershell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">nginx.exe <span class="literal">-t</span></span><br></pre></td></tr></table></figure>
+
+<p>第三步，重载 nginx：</p>
+<figure class="highlight powershell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">nginx.exe <span class="literal">-s</span> reload</span><br></pre></td></tr></table></figure>
+
+<p>第四步，前端上传图片。</p>
+<p>浏览器 Network 中 <code>/upload/blog</code> 应该返回：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="string">&quot;/blogs/2026/06/23/xxx.jpg&quot;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>第五步，前端图片地址应该是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/imgs/blogs/2026/06/23/xxx.jpg</span><br></pre></td></tr></table></figure>
+
+<p>第六步，直接访问：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://localhost:8080/imgs/blogs/2026/06/23/xxx.jpg</span><br></pre></td></tr></table></figure>
+
+<p>如果能看到图片，说明：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Go 上传成功</span><br><span class="line">OSS 存储成功</span><br><span class="line">nginx 代理成功</span><br><span class="line">前端拼接成功</span><br></pre></td></tr></table></figure>
+
+<h2 id="十九、注意-AccessKey-安全"><a href="#十九、注意-AccessKey-安全" class="headerlink" title="十九、注意 AccessKey 安全"></a>十九、注意 AccessKey 安全</h2><p>OSS 的 AccessKey 不应该提交到 GitHub。</p>
+<p>更好的做法是使用环境变量：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">oss:</span></span><br><span class="line">  <span class="attr">endpoint:</span> <span class="string">oss-cn-beijing.aliyuncs.com</span></span><br><span class="line">  <span class="attr">bucket:</span> <span class="string">your-bucket-name</span></span><br><span class="line">  <span class="attr">accessKeyId:</span> <span class="string">$&#123;OSS_ACCESS_KEY_ID&#125;</span></span><br><span class="line">  <span class="attr">accessKeySecret:</span> <span class="string">$&#123;OSS_ACCESS_KEY_SECRET&#125;</span></span><br><span class="line">  <span class="attr">publicHost:</span> <span class="string">https://your-bucket-name.oss-cn-beijing.aliyuncs.com</span></span><br><span class="line">  <span class="attr">dir:</span> <span class="string">blogs</span></span><br></pre></td></tr></table></figure>
+
+<p>如果真实 AccessKey 已经出现在公开仓库、截图或聊天记录里，建议去阿里云控制台轮换。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>今天这部分让我更清楚地理解了文件上传不是简单地“保存文件”。</p>
+<p>它其实有四个环节必须对齐：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1. 前端上传字段名：file</span><br><span class="line">2. 后端返回路径：/blogs/...</span><br><span class="line">3. OSS objectName：blogs/...</span><br><span class="line">4. nginx 图片访问路径：/imgs/blogs/... -&gt; OSS /blogs/...</span><br></pre></td></tr></table></figure>
+
+<p>只要其中一个环节不一致，就会出现上传成功但图片裂开的情况。</p>
+<p>最终 Go 版实现了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">POST /upload/blog 上传图片到 OSS</span><br><span class="line">GET /upload/blog/delete 删除 OSS 图片</span><br><span class="line">前端无需修改</span><br><span class="line">nginx 代理 OSS 图片访问</span><br><span class="line">发布博客时保存 /imgs/blogs/... 图片路径</span><br></pre></td></tr></table></figure>
+
+<p>这样图片上传就和 Java 版前端约定保持一致，同时又把实际存储迁移到了云端 OSS。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/" data-id="cuidkWPofRKcw8-DN_UKF5I2a" data-title="Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Nginx/" rel="tag">Nginx</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OSS/" rel="tag">OSS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" rel="tag">文件上传</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">Go 版黑马点评：发布博客与 Redis Feed 流推送详解</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/Redis/">Redis</a></li></ul></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feed%E6%B5%81/" rel="tag">Feed流</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nginx/" rel="tag">Nginx</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OSS/" rel="tag">OSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Set/" rel="tag">Set</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%85%B3%E6%B3%A8/" rel="tag">关注</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" rel="tag">后端架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" rel="tag">文件上传</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" rel="tag">短信登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" rel="tag">项目架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" rel="tag">首页接口</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/Feed%E6%B5%81/" style="font-size: 10px;">Feed流</a> <a href="/tags/GORM/" style="font-size: 16.67px;">GORM</a> <a href="/tags/Gin/" style="font-size: 20px;">Gin</a> <a href="/tags/MySQL/" style="font-size: 10px;">MySQL</a> <a href="/tags/Nginx/" style="font-size: 10px;">Nginx</a> <a href="/tags/OSS/" style="font-size: 10px;">OSS</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Set/" style="font-size: 10px;">Set</a> <a href="/tags/Viper/" style="font-size: 13.33px;">Viper</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E5%85%B3%E6%B3%A8/" style="font-size: 10px;">关注</a> <a href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">后端架构</a> <a href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" style="font-size: 10px;">文件上传</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a> <a href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" style="font-size: 10px;">短信登录</a> <a href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">项目架构</a> <a href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" style="font-size: 10px;">首页接口</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/">Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/">Go 版黑马点评：发布博客与 Redis Feed 流推送详解</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/22/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%85%B3%E6%B3%A8%E3%80%81%E5%8F%96%E5%85%B3%E3%80%81%E5%85%B1%E5%90%8C%E5%85%B3%E6%B3%A8%E4%B8%8ERedisSet%E4%BC%98%E5%8C%96/">Go 版黑马点评：关注、取关、共同关注与 Redis Set 优化</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-blog-like-zset/">Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-login-token-middleware/">Go 版黑马点评：登录、Token 与双层拦截器</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 一点甜a<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

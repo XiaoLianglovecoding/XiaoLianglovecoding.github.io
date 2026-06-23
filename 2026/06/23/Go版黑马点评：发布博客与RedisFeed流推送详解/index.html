@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Go 版黑马点评：发布博客与 Redis Feed 流推送详解 | 我的Golang学习博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="今天我把 Go 版黑马点评里“发布博客”和“关注 Feed 流”这一块串了起来。 这部分是黑马点评 Redis 实战里很重要的一节。因为它不再只是简单地查数据库，而是开始利用 Redis 的有序集合 ZSet 做消息推送。 这篇文章重点记录：  发布博客接口的完整链路 为什么 Feed 流要用 Redis ZSet 推模式 Feed 流的核心思想 发布博客时如何把博客 ID 推送给粉丝 查询关注流">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go 版黑马点评：发布博客与 Redis Feed 流推送详解">
+<meta property="og:url" content="http://example.com/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/index.html">
+<meta property="og:site_name" content="我的Golang学习博客">
+<meta property="og:description" content="今天我把 Go 版黑马点评里“发布博客”和“关注 Feed 流”这一块串了起来。 这部分是黑马点评 Redis 实战里很重要的一节。因为它不再只是简单地查数据库，而是开始利用 Redis 的有序集合 ZSet 做消息推送。 这篇文章重点记录：  发布博客接口的完整链路 为什么 Feed 流要用 Redis ZSet 推模式 Feed 流的核心思想 发布博客时如何把博客 ID 推送给粉丝 查询关注流">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-23T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-23T13:22:29.356Z">
+<meta property="article:author" content="一点甜a">
+<meta property="article:tag" content="Feed流">
+<meta property="article:tag" content="GORM">
+<meta property="article:tag" content="Gin">
+<meta property="article:tag" content="Redis">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">我的Golang学习博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">记录用Golang+Redis实现大众点评与学习思考</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-Go版黑马点评：发布博客与RedisFeed流推送详解" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/" class="article-date">
+  <time class="dt-published" datetime="2026-06-23T12:00:00.000Z" itemprop="datePublished">2026-06-23</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Go 版黑马点评：发布博客与 Redis Feed 流推送详解
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>今天我把 Go 版黑马点评里“发布博客”和“关注 Feed 流”这一块串了起来。</p>
+<p>这部分是黑马点评 Redis 实战里很重要的一节。因为它不再只是简单地查数据库，而是开始利用 Redis 的有序集合 ZSet 做消息推送。</p>
+<p>这篇文章重点记录：</p>
+<ul>
+<li>发布博客接口的完整链路</li>
+<li>为什么 Feed 流要用 Redis ZSet</li>
+<li>推模式 Feed 流的核心思想</li>
+<li>发布博客时如何把博客 ID 推送给粉丝</li>
+<li>查询关注流时如何用滚动分页</li>
+<li><code>minTime + offset</code> 为什么比普通页码更适合 Feed</li>
+</ul>
+<span id="more"></span>
+
+<h2 id="一、Feed-流要解决什么问题"><a href="#一、Feed-流要解决什么问题" class="headerlink" title="一、Feed 流要解决什么问题"></a>一、Feed 流要解决什么问题</h2><p>在普通博客列表里，我们通常这样查：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /blog/hot?current=1</span><br></pre></td></tr></table></figure>
+
+<p>后端直接从 MySQL 查热门博客：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> <span class="operator">*</span> <span class="keyword">FROM</span> tb_blog <span class="keyword">ORDER</span> <span class="keyword">BY</span> liked <span class="keyword">DESC</span> LIMIT <span class="number">10</span> <span class="keyword">OFFSET</span> <span class="number">0</span>;</span><br></pre></td></tr></table></figure>
+
+<p>但关注流不是这么回事。</p>
+<p>关注流的业务是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我关注了谁，我就希望在“关注”页看到他们新发布的博客。</span><br></pre></td></tr></table></figure>
+
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">用户 A 关注了用户 B 和用户 C</span><br><span class="line">用户 B 发布了一篇博客</span><br><span class="line">用户 C 发布了一篇博客</span><br></pre></td></tr></table></figure>
+
+<p>那么用户 A 打开关注页时，就应该看到 B 和 C 的新博客。</p>
+<p>这里有两种实现思路：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">拉模式：用户打开关注页时，临时查询他关注的人，再查这些人的博客</span><br><span class="line">推模式：作者发布博客时，提前把博客 ID 推送到粉丝的收件箱</span><br></pre></td></tr></table></figure>
+
+<p>这次我实现的是推模式。</p>
+<h2 id="二、推模式的核心思想"><a href="#二、推模式的核心思想" class="headerlink" title="二、推模式的核心思想"></a>二、推模式的核心思想</h2><p>推模式可以理解成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">每个用户都有一个自己的 Feed 收件箱</span><br></pre></td></tr></table></figure>
+
+<p>当某个作者发布博客时，后端立刻找到他的粉丝列表，然后把这篇博客的 ID 放进每个粉丝的收件箱。</p>
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">用户 B 发布博客 blogId = 100</span><br><span class="line">用户 A、D、E 都关注了用户 B</span><br></pre></td></tr></table></figure>
+
+<p>那么后端写入：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">feed:A  -&gt; 100</span><br><span class="line">feed:D  -&gt; 100</span><br><span class="line">feed:E  -&gt; 100</span><br></pre></td></tr></table></figure>
+
+<p>用户 A 打开关注页时，不需要再去查“我关注了谁”，只要读自己的收件箱：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">feed:A</span><br></pre></td></tr></table></figure>
+
+<p>这就是推模式。</p>
+<h2 id="三、为什么用-Redis-ZSet"><a href="#三、为什么用-Redis-ZSet" class="headerlink" title="三、为什么用 Redis ZSet"></a>三、为什么用 Redis ZSet</h2><p>Feed 流不仅要保存博客 ID，还要按照发布时间排序。</p>
+<p>Redis ZSet 正好适合：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">member = blogId</span><br><span class="line">score  = 发布时间戳</span><br></pre></td></tr></table></figure>
+
+<p>例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">feed:1</span><br><span class="line">  member = 25, score = 1782217148000</span><br><span class="line">  member = 26, score = 1782217150000</span><br></pre></td></tr></table></figure>
+
+<p>这样我们就可以用：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">ZADD 写入博客 ID</span><br><span class="line">ZREVRANGEBYSCORE 按时间倒序查询</span><br></pre></td></tr></table></figure>
+
+<p>Redis key 统一放在常量里：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> (</span><br><span class="line">    FeedKey = <span class="string">&quot;feed:&quot;</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>实际 key：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">feed:&#123;userId&#125;</span><br></pre></td></tr></table></figure>
+
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">feed:1</span><br><span class="line">feed:2</span><br><span class="line">feed:5</span><br></pre></td></tr></table></figure>
+
+<h2 id="四、发布博客接口入口"><a href="#四、发布博客接口入口" class="headerlink" title="四、发布博客接口入口"></a>四、发布博客接口入口</h2><p>发布博客接口是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">POST /blog</span><br></pre></td></tr></table></figure>
+
+<p>路由上它是登录接口，因为发布博客必须知道当前用户是谁。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">registerBlogRoutes</span><span class="params">(r *gin.Engine, h *handler.BlogHandler)</span></span> &#123;</span><br><span class="line">    protectedGroup := r.Group(<span class="string">&quot;/blog&quot;</span>)</span><br><span class="line">    protectedGroup.Use(middleware.LoginInterceptor())</span><br><span class="line">    &#123;</span><br><span class="line">        protectedGroup.GET(<span class="string">&quot;/of/me&quot;</span>, h.QueryMyBlog)</span><br><span class="line">        protectedGroup.GET(<span class="string">&quot;/of/follow&quot;</span>, h.QueryBlogOfFollow)</span><br><span class="line">        protectedGroup.POST(<span class="string">&quot;&quot;</span>, h.SaveBlog)</span><br><span class="line">        protectedGroup.PUT(<span class="string">&quot;/like/:id&quot;</span>, h.LikeBlog)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里有两个和 Feed 相关的接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">POST /blog            发布博客，同时推送 Feed</span><br><span class="line">GET  /blog/of/follow  查询关注 Feed 流</span><br></pre></td></tr></table></figure>
+
+<h2 id="五、Handler：绑定博客参数和当前用户"><a href="#五、Handler：绑定博客参数和当前用户" class="headerlink" title="五、Handler：绑定博客参数和当前用户"></a>五、Handler：绑定博客参数和当前用户</h2><p><code>SaveBlog</code> 的 Handler：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *BlogHandler)</span></span> SaveBlog(c *gin.Context) &#123;</span><br><span class="line">    <span class="keyword">var</span> blog model.Blog</span><br><span class="line">    <span class="keyword">if</span> err := c.ShouldBindJSON(&amp;blog); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        writeResult(c, result.Fail(<span class="string">&quot;invalid blog request body&quot;</span>))</span><br><span class="line">        <span class="keyword">return</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    userDTO, err := userutils.GetUser(c)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        c.JSON(http.StatusUnauthorized, result.Fail(err.Error()))</span><br><span class="line">        <span class="keyword">return</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    currentUserID := userDTO.ID</span><br><span class="line">    writeResult(c, h.blogService.SaveBlog(</span><br><span class="line">        c.Request.Context(),</span><br><span class="line">        blog,</span><br><span class="line">        currentUserID,</span><br><span class="line">    ))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Handler 层只做三件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 绑定请求体 JSON 到 Blog</span><br><span class="line">2. 从 Gin Context 中拿当前登录用户</span><br><span class="line">3. 调用 Service</span><br></pre></td></tr></table></figure>
+
+<p>它不负责查数据库，也不负责写 Redis。</p>
+<h2 id="六、BlogService-依赖-FollowRepository"><a href="#六、BlogService-依赖-FollowRepository" class="headerlink" title="六、BlogService 依赖 FollowRepository"></a>六、BlogService 依赖 FollowRepository</h2><p>发布博客要推送给粉丝，所以 BlogService 不只需要 BlogRepository，还需要 FollowRepository。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> blogService <span class="keyword">struct</span> &#123;</span><br><span class="line">    blogRepo    repository.BlogRepository</span><br><span class="line">    userRepo    repository.UserRepository</span><br><span class="line">    followRepo  repository.FollowRepository</span><br><span class="line">    redisClient *redis.Client</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewBlogService</span><span class="params">(</span></span></span><br><span class="line"><span class="params"><span class="function">    blogRepo repository.BlogRepository,</span></span></span><br><span class="line"><span class="params"><span class="function">    userRepo repository.UserRepository,</span></span></span><br><span class="line"><span class="params"><span class="function">    followRepo repository.FollowRepository,</span></span></span><br><span class="line"><span class="params"><span class="function">    redisClient *redis.Client,</span></span></span><br><span class="line"><span class="params"><span class="function">)</span></span> BlogService &#123;</span><br><span class="line">    <span class="keyword">return</span> &amp;blogService&#123;</span><br><span class="line">        blogRepo:    blogRepo,</span><br><span class="line">        userRepo:    userRepo,</span><br><span class="line">        followRepo:  followRepo,</span><br><span class="line">        redisClient: redisClient,</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>依赖组装时也要把 <code>repos.Follow</code> 传进去：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Blog: NewBlogService(</span><br><span class="line">    repos.Blog,</span><br><span class="line">    repos.User,</span><br><span class="line">    repos.Follow,</span><br><span class="line">    redisClient,</span><br><span class="line">),</span><br></pre></td></tr></table></figure>
+
+<p>这一步很重要。</p>
+<p>Go 没有 Spring 那种自动注入，构造函数少传一个依赖，运行时就真的没有这个依赖。</p>
+<h2 id="七、保存博客到-MySQL"><a href="#七、保存博客到-MySQL" class="headerlink" title="七、保存博客到 MySQL"></a>七、保存博客到 MySQL</h2><p>Repository 里的保存方法：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *blogRepository)</span></span> SaveBlog(ctx context.Context, blog *model.Blog) <span class="type">error</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> r.db.WithContext(ctx).Create(blog).Error</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>GORM 有一个很方便的特性：插入成功后，会把数据库生成的自增主键写回结构体。</p>
+<p>也就是说：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">err := r.db.Create(blog).Error</span><br></pre></td></tr></table></figure>
+
+<p>执行完成后：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blog.ID</span><br></pre></td></tr></table></figure>
+
+<p>就已经有值了。</p>
+<p>这对 Feed 推送很重要，因为我们推送到 Redis 里的 member 就是博客 ID。</p>
+<h2 id="八、查询作者的粉丝列表"><a href="#八、查询作者的粉丝列表" class="headerlink" title="八、查询作者的粉丝列表"></a>八、查询作者的粉丝列表</h2><p>发布博客后，需要知道“谁关注了当前作者”。</p>
+<p>关注表里：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">user_id          发起关注的人</span><br><span class="line">follow_user_id   被关注的人</span><br></pre></td></tr></table></figure>
+
+<p>如果当前作者 ID 是 2，那么他的粉丝就是：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> user_id <span class="keyword">FROM</span> tb_follow <span class="keyword">WHERE</span> follow_user_id <span class="operator">=</span> <span class="number">2</span>;</span><br></pre></td></tr></table></figure>
+
+<p>Repository 代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *followRepository)</span></span> FindFollowerIDs(ctx context.Context, followUserID <span class="type">int64</span>) ([]<span class="type">int64</span>, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> ids []<span class="type">int64</span></span><br><span class="line"></span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Model(&amp;model.Follow&#123;&#125;).</span><br><span class="line">        Where(<span class="string">&quot;follow_user_id = ?&quot;</span>, followUserID).</span><br><span class="line">        Pluck(<span class="string">&quot;user_id&quot;</span>, &amp;ids).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> ids, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里用的是 <code>Pluck</code>，它只查询某一列。</p>
+<p>相比查询完整 <code>Follow</code> 对象：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Find(&amp;follows)</span><br></pre></td></tr></table></figure>
+
+<p><code>Pluck(&quot;user_id&quot;, &amp;ids)</code> 更直接。</p>
+<h2 id="九、SaveBlog-完整逻辑"><a href="#九、SaveBlog-完整逻辑" class="headerlink" title="九、SaveBlog 完整逻辑"></a>九、SaveBlog 完整逻辑</h2><p>发布博客的 Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *blogService)</span></span> SaveBlog(ctx context.Context, blog model.Blog, currentUserID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="comment">// 1. 补全博客作者 ID</span></span><br><span class="line">    blog.UserID = currentUserID</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 2. 保存博客到 MySQL</span></span><br><span class="line">    <span class="keyword">if</span> err := s.blogRepo.SaveBlog(ctx, &amp;blog); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;保存博客失败: %v&quot;</span>, err)</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;发布博客失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 3. 查询当前作者的粉丝列表</span></span><br><span class="line">    followerIDs, err := s.followRepo.FindFollowerIDs(ctx, currentUserID)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;获取粉丝列表失败: %v&quot;</span>, err)</span><br><span class="line">        <span class="keyword">return</span> result.OKWithData(blog.ID)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 4. 没有粉丝就不用推送，直接返回博客 ID</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">len</span>(followerIDs) == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.OKWithData(blog.ID)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 5. 推送博客 ID 到每个粉丝的 Feed ZSet</span></span><br><span class="line">    now := time.Now().UnixMilli()</span><br><span class="line">    blogIDStr := strconv.FormatInt(blog.ID, <span class="number">10</span>)</span><br><span class="line"></span><br><span class="line">    pipe := s.redisClient.Pipeline()</span><br><span class="line">    <span class="keyword">for</span> _, followerID := <span class="keyword">range</span> followerIDs &#123;</span><br><span class="line">        key := constants.FeedKey + strconv.FormatInt(followerID, <span class="number">10</span>)</span><br><span class="line">        pipe.ZAdd(ctx, key, redis.Z&#123;</span><br><span class="line">            Score:  <span class="type">float64</span>(now),</span><br><span class="line">            Member: blogIDStr,</span><br><span class="line">        &#125;)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> _, err := pipe.Exec(ctx); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;推送 Feed 失败: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(blog.ID)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段代码可以拆成四个阶段：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1. blog.UserID = 当前登录用户 ID</span><br><span class="line">2. 保存到 tb_blog</span><br><span class="line">3. 查询粉丝 ID 列表</span><br><span class="line">4. 给每个粉丝的 feed:&#123;id&#125; 写入 blogId</span><br></pre></td></tr></table></figure>
+
+<h2 id="十、为什么-Feed-推送失败仍然返回成功"><a href="#十、为什么-Feed-推送失败仍然返回成功" class="headerlink" title="十、为什么 Feed 推送失败仍然返回成功"></a>十、为什么 Feed 推送失败仍然返回成功</h2><p>这里有一个设计取舍：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> _, err := pipe.Exec(ctx); err != <span class="literal">nil</span> &#123;</span><br><span class="line">    log.Printf(<span class="string">&quot;推送 Feed 失败: %v&quot;</span>, err)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">return</span> result.OKWithData(blog.ID)</span><br></pre></td></tr></table></figure>
+
+<p>如果博客已经保存到 MySQL，但 Redis 推送失败，要不要让发布失败？</p>
+<p>学习阶段我选择：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">博客保存成功，就是发布成功</span><br><span class="line">Feed 推送失败先记日志</span><br></pre></td></tr></table></figure>
+
+<p>因为博客是核心数据，已经落库了。</p>
+<p>Redis Feed 是派生数据，可以后续通过补偿或重建修复。</p>
+<p>这也体现了一个很重要的思想：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">MySQL 是主数据</span><br><span class="line">Redis 是加速和派生结构</span><br></pre></td></tr></table></figure>
+
+<p>后面如果做得更严谨，可以把失败的 Feed 推送放到消息队列里重试。</p>
+<h2 id="十一、为什么使用-Pipeline"><a href="#十一、为什么使用-Pipeline" class="headerlink" title="十一、为什么使用 Pipeline"></a>十一、为什么使用 Pipeline</h2><p>如果一个作者有 1000 个粉丝，逐个执行 Redis 命令：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">redisClient.ZAdd(...)</span><br><span class="line">redisClient.ZAdd(...)</span><br><span class="line">redisClient.ZAdd(...)</span><br></pre></td></tr></table></figure>
+
+<p>会产生很多次网络往返。</p>
+<p>Pipeline 可以把多条命令攒起来一次发送：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pipe := s.redisClient.Pipeline()</span><br><span class="line"><span class="keyword">for</span> _, followerID := <span class="keyword">range</span> followerIDs &#123;</span><br><span class="line">    key := constants.FeedKey + strconv.FormatInt(followerID, <span class="number">10</span>)</span><br><span class="line">    pipe.ZAdd(ctx, key, redis.Z&#123;</span><br><span class="line">        Score:  <span class="type">float64</span>(now),</span><br><span class="line">        Member: blogIDStr,</span><br><span class="line">    &#125;)</span><br><span class="line">&#125;</span><br><span class="line">_, err := pipe.Exec(ctx)</span><br></pre></td></tr></table></figure>
+
+<p>这能减少网络开销。</p>
+<p>不过要注意，Pipeline 不是事务。它只是批量发送命令，不保证所有命令一定同时成功或同时失败。</p>
+<h2 id="十二、关注流查询接口"><a href="#十二、关注流查询接口" class="headerlink" title="十二、关注流查询接口"></a>十二、关注流查询接口</h2><p>查询关注流接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /blog/of/follow?lastId=xxx&amp;offset=0</span><br></pre></td></tr></table></figure>
+
+<p>这里不用普通的 <code>current=1</code> 页码，而是用：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">lastId  上一次查询返回的最小时间戳</span><br><span class="line">offset  同一个时间戳下已经跳过了几条</span><br></pre></td></tr></table></figure>
+
+<p>Handler：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *BlogHandler)</span></span> QueryBlogOfFollow(c *gin.Context) &#123;</span><br><span class="line">    lastID := parseInt64Query(c, <span class="string">&quot;lastId&quot;</span>, <span class="number">0</span>)</span><br><span class="line">    offset := parseIntQuery(c, <span class="string">&quot;offset&quot;</span>, <span class="number">0</span>)</span><br><span class="line"></span><br><span class="line">    userDTO, err := userutils.GetUser(c)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        c.JSON(http.StatusUnauthorized, result.Fail(err.Error()))</span><br><span class="line">        <span class="keyword">return</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    writeResult(c, h.blogService.QueryBlogOfFollow(</span><br><span class="line">        c.Request.Context(),</span><br><span class="line">        lastID,</span><br><span class="line">        offset,</span><br><span class="line">        userDTO.ID,</span><br><span class="line">    ))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的 <code>lastId</code> 名字容易误导。</p>
+<p>它不是博客 ID，而是上一次返回数据里的最小时间戳。</p>
+<p>在 Service 里我把它叫做 <code>max</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">QueryBlogOfFollow(ctx, max, offset, currentUserID)</span><br></pre></td></tr></table></figure>
+
+<p>含义是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">查询 score &lt;= max 的记录</span><br></pre></td></tr></table></figure>
+
+<h2 id="十三、ScrollResult"><a href="#十三、ScrollResult" class="headerlink" title="十三、ScrollResult"></a>十三、ScrollResult</h2><p>Feed 流返回的是滚动分页结构：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> ScrollResult <span class="keyword">struct</span> &#123;</span><br><span class="line">    List    any   <span class="string">`json:&quot;list&quot;`</span></span><br><span class="line">    MinTime <span class="type">int64</span> <span class="string">`json:&quot;minTime&quot;`</span></span><br><span class="line">    Offset  <span class="type">int</span>   <span class="string">`json:&quot;offset&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这三个字段含义：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">list     当前页博客列表</span><br><span class="line">minTime  当前页里最小的时间戳</span><br><span class="line">offset   当前页里和 minTime 相同的记录数量</span><br></pre></td></tr></table></figure>
+
+<p>前端下一次请求时，会把：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">lastId = minTime</span><br><span class="line">offset = offset</span><br></pre></td></tr></table></figure>
+
+<p>传回来。</p>
+<h2 id="十四、为什么不用普通分页"><a href="#十四、为什么不用普通分页" class="headerlink" title="十四、为什么不用普通分页"></a>十四、为什么不用普通分页</h2><p>普通分页是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">current = 1</span><br><span class="line">current = 2</span><br><span class="line">current = 3</span><br></pre></td></tr></table></figure>
+
+<p>但 Feed 流里一直可能有新博客插入。</p>
+<p>假设用户正在看第 1 页，这时有人新发了一篇博客，原来的第 2 页数据就会被挤动。</p>
+<p>这会导致：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">重复看到同一条</span><br><span class="line">或者漏掉某一条</span><br></pre></td></tr></table></figure>
+
+<p>所以 Feed 流更适合用滚动分页：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">按时间戳往下翻</span><br><span class="line">每次告诉后端上一页最小时间戳</span><br></pre></td></tr></table></figure>
+
+<p>这就是 <code>minTime + offset</code> 的价值。</p>
+<h2 id="十五、从-Redis-查询关注流"><a href="#十五、从-Redis-查询关注流" class="headerlink" title="十五、从 Redis 查询关注流"></a>十五、从 Redis 查询关注流</h2><p>Service 里的查询：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">zs, err := s.redisClient.ZRevRangeByScoreWithScores(ctx, key, &amp;redis.ZRangeBy&#123;</span><br><span class="line">    Max:    strconv.FormatInt(max, <span class="number">10</span>),</span><br><span class="line">    Min:    <span class="string">&quot;0&quot;</span>,</span><br><span class="line">    Offset: <span class="type">int64</span>(offset),</span><br><span class="line">    Count:  <span class="number">2</span>,</span><br><span class="line">&#125;).Result()</span><br></pre></td></tr></table></figure>
+
+<p>对应 Redis 命令大概是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ZREVRANGEBYSCORE feed:&#123;userId&#125; max 0 LIMIT offset 2 WITHSCORES</span><br></pre></td></tr></table></figure>
+
+<p>解释一下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">ZREVRANGEBYSCORE  按 score 从大到小查</span><br><span class="line">Max               最大时间戳</span><br><span class="line">Min               最小时间戳</span><br><span class="line">Offset            跳过几条</span><br><span class="line">Count             本次查几条</span><br><span class="line">WITHSCORES        返回 score，方便计算 minTime</span><br></pre></td></tr></table></figure>
+
+<p>当前 <code>Count</code> 写成 2，是为了学习和调试方便。</p>
+<p>后面可以改成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">5 或 10</span><br></pre></td></tr></table></figure>
+
+<h2 id="十六、解析-Redis-返回的博客-ID-和时间戳"><a href="#十六、解析-Redis-返回的博客-ID-和时间戳" class="headerlink" title="十六、解析 Redis 返回的博客 ID 和时间戳"></a>十六、解析 Redis 返回的博客 ID 和时间戳</h2><p>Redis ZSet 返回的是 <code>[]redis.Z</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">ids := <span class="built_in">make</span>([]<span class="type">int64</span>, <span class="number">0</span>, <span class="built_in">len</span>(zs))</span><br><span class="line">minTime := <span class="type">int64</span>(<span class="number">0</span>)</span><br><span class="line">nextOffset := <span class="number">0</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> _, z := <span class="keyword">range</span> zs &#123;</span><br><span class="line">    score := <span class="type">int64</span>(z.Score)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> score == minTime &#123;</span><br><span class="line">        nextOffset++</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        minTime = score</span><br><span class="line">        nextOffset = <span class="number">1</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    idStr := fmt.Sprint(z.Member)</span><br><span class="line">    id, err := strconv.ParseInt(idStr, <span class="number">10</span>, <span class="number">64</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;Feed 中存在非法 blogId: %v&quot;</span>, z.Member)</span><br><span class="line">        <span class="keyword">continue</span></span><br><span class="line">    &#125;</span><br><span class="line">    ids = <span class="built_in">append</span>(ids, id)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里做了两件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">1. 取出 blogId</span><br><span class="line">2. 计算本页最小时间戳和 offset</span><br></pre></td></tr></table></figure>
+
+<p>为什么要计算 <code>offset</code>？</p>
+<p>因为可能有多篇博客在同一毫秒发布，score 一样。</p>
+<p>如果只用 <code>minTime</code> 翻页，下一页可能重复读到同一时间戳下已经读过的记录。</p>
+<p>所以还需要：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">offset = 当前页中 minTime 出现了几次</span><br></pre></td></tr></table></figure>
+
+<h2 id="十七、批量查博客详情"><a href="#十七、批量查博客详情" class="headerlink" title="十七、批量查博客详情"></a>十七、批量查博客详情</h2><p>Redis Feed 里只存博客 ID。</p>
+<p>真正展示时还要去 MySQL 查博客详情。</p>
+<p>Repository：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *blogRepository)</span></span> FindBlogsByIDs(ctx context.Context, ids []<span class="type">int64</span>) ([]model.Blog, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">len</span>(ids) == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> []model.Blog&#123;&#125;, <span class="literal">nil</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">var</span> blogs []model.Blog</span><br><span class="line">    err := r.db.WithContext(ctx).</span><br><span class="line">        Where(<span class="string">&quot;id IN ?&quot;</span>, ids).</span><br><span class="line">        Find(&amp;blogs).Error</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> blogs, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里加了空切片保护：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> <span class="built_in">len</span>(ids) == <span class="number">0</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> []model.Blog&#123;&#125;, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>避免生成无意义的：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">WHERE</span> id <span class="keyword">IN</span> ()</span><br></pre></td></tr></table></figure>
+
+<h2 id="十八、为什么要按-Redis-顺序重排"><a href="#十八、为什么要按-Redis-顺序重排" class="headerlink" title="十八、为什么要按 Redis 顺序重排"></a>十八、为什么要按 Redis 顺序重排</h2><p>MySQL 的 <code>IN</code> 查询不保证返回顺序。</p>
+<p>比如传入：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ids = [30, 28, 25]</span><br></pre></td></tr></table></figure>
+
+<p>MySQL 返回可能是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[25, 28, 30]</span><br></pre></td></tr></table></figure>
+
+<p>但 Feed 流必须保持 Redis 里按时间倒序的顺序。</p>
+<p>所以要先做 map：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">blogMap := <span class="built_in">make</span>(<span class="keyword">map</span>[<span class="type">int64</span>]model.Blog, <span class="built_in">len</span>(blogs))</span><br><span class="line"><span class="keyword">for</span> _, blog := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">    blogMap[blog.ID] = blog</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后按原始 ID 顺序组装：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">orderedBlogs := <span class="built_in">make</span>([]model.Blog, <span class="number">0</span>, <span class="built_in">len</span>(ids))</span><br><span class="line"><span class="keyword">for</span> _, id := <span class="keyword">range</span> ids &#123;</span><br><span class="line">    blog, ok := blogMap[id]</span><br><span class="line">    <span class="keyword">if</span> !ok &#123;</span><br><span class="line">        <span class="keyword">continue</span></span><br><span class="line">    &#125;</span><br><span class="line">    orderedBlogs = <span class="built_in">append</span>(orderedBlogs, blog)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这一点很关键。</p>
+<p>否则前端看到的 Feed 顺序就可能是乱的。</p>
+<h2 id="十九、回填作者信息和点赞状态"><a href="#十九、回填作者信息和点赞状态" class="headerlink" title="十九、回填作者信息和点赞状态"></a>十九、回填作者信息和点赞状态</h2><p>博客表里只有 <code>user_id</code>，前端还需要作者昵称和头像。</p>
+<p>所以查询完博客后，还要补充：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i := <span class="keyword">range</span> orderedBlogs &#123;</span><br><span class="line">    user, err := s.userRepo.FindUserByID(ctx, orderedBlogs[i].UserID)</span><br><span class="line">    <span class="keyword">if</span> err == <span class="literal">nil</span> &#123;</span><br><span class="line">        orderedBlogs[i].Name = user.NickName</span><br><span class="line">        orderedBlogs[i].Icon = user.Icon</span><br><span class="line">    &#125;</span><br><span class="line">    s.setBlogIsLike(ctx, &amp;orderedBlogs[i], currentUserID)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里用 <code>for i := range</code>，是为了修改切片里的原始元素。</p>
+<p>如果写成：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> _, blog := <span class="keyword">range</span> orderedBlogs &#123;</span><br><span class="line">    blog.Name = <span class="string">&quot;xxx&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>改的是副本，不会影响原切片。</p>
+<h2 id="二十、QueryBlogOfFollow-完整代码"><a href="#二十、QueryBlogOfFollow-完整代码" class="headerlink" title="二十、QueryBlogOfFollow 完整代码"></a>二十、QueryBlogOfFollow 完整代码</h2><p>完整 Service：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *blogService)</span></span> QueryBlogOfFollow(ctx context.Context, max <span class="type">int64</span>, offset <span class="type">int</span>, currentUserID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> currentUserID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;用户未登录&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> max &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        max = time.Now().UnixMilli()</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> offset &lt; <span class="number">0</span> &#123;</span><br><span class="line">        offset = <span class="number">0</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    key := constants.FeedKey + strconv.FormatInt(currentUserID, <span class="number">10</span>)</span><br><span class="line"></span><br><span class="line">    zs, err := s.redisClient.ZRevRangeByScoreWithScores(ctx, key, &amp;redis.ZRangeBy&#123;</span><br><span class="line">        Max:    strconv.FormatInt(max, <span class="number">10</span>),</span><br><span class="line">        Min:    <span class="string">&quot;0&quot;</span>,</span><br><span class="line">        Offset: <span class="type">int64</span>(offset),</span><br><span class="line">        Count:  <span class="number">2</span>,</span><br><span class="line">    &#125;).Result()</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;查询关注流失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">len</span>(zs) == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.OKWithData(dto.ScrollResult&#123;</span><br><span class="line">            List:    []model.Blog&#123;&#125;,</span><br><span class="line">            MinTime: <span class="number">0</span>,</span><br><span class="line">            Offset:  <span class="number">0</span>,</span><br><span class="line">        &#125;)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ids := <span class="built_in">make</span>([]<span class="type">int64</span>, <span class="number">0</span>, <span class="built_in">len</span>(zs))</span><br><span class="line">    minTime := <span class="type">int64</span>(<span class="number">0</span>)</span><br><span class="line">    nextOffset := <span class="number">0</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> _, z := <span class="keyword">range</span> zs &#123;</span><br><span class="line">        score := <span class="type">int64</span>(z.Score)</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> score == minTime &#123;</span><br><span class="line">            nextOffset++</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            minTime = score</span><br><span class="line">            nextOffset = <span class="number">1</span></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        idStr := fmt.Sprint(z.Member)</span><br><span class="line">        id, err := strconv.ParseInt(idStr, <span class="number">10</span>, <span class="number">64</span>)</span><br><span class="line">        <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">            log.Printf(<span class="string">&quot;Feed 中存在非法 blogId: %v&quot;</span>, z.Member)</span><br><span class="line">            <span class="keyword">continue</span></span><br><span class="line">        &#125;</span><br><span class="line">        ids = <span class="built_in">append</span>(ids, id)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    blogs, err := s.blogRepo.FindBlogsByIDs(ctx, ids)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;查询博客失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    blogMap := <span class="built_in">make</span>(<span class="keyword">map</span>[<span class="type">int64</span>]model.Blog, <span class="built_in">len</span>(blogs))</span><br><span class="line">    <span class="keyword">for</span> _, blog := <span class="keyword">range</span> blogs &#123;</span><br><span class="line">        blogMap[blog.ID] = blog</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    orderedBlogs := <span class="built_in">make</span>([]model.Blog, <span class="number">0</span>, <span class="built_in">len</span>(ids))</span><br><span class="line">    <span class="keyword">for</span> _, id := <span class="keyword">range</span> ids &#123;</span><br><span class="line">        blog, ok := blogMap[id]</span><br><span class="line">        <span class="keyword">if</span> !ok &#123;</span><br><span class="line">            <span class="keyword">continue</span></span><br><span class="line">        &#125;</span><br><span class="line">        orderedBlogs = <span class="built_in">append</span>(orderedBlogs, blog)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> i := <span class="keyword">range</span> orderedBlogs &#123;</span><br><span class="line">        user, err := s.userRepo.FindUserByID(ctx, orderedBlogs[i].UserID)</span><br><span class="line">        <span class="keyword">if</span> err == <span class="literal">nil</span> &#123;</span><br><span class="line">            orderedBlogs[i].Name = user.NickName</span><br><span class="line">            orderedBlogs[i].Icon = user.Icon</span><br><span class="line">        &#125;</span><br><span class="line">        s.setBlogIsLike(ctx, &amp;orderedBlogs[i], currentUserID)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(dto.ScrollResult&#123;</span><br><span class="line">        List:    orderedBlogs,</span><br><span class="line">        MinTime: minTime,</span><br><span class="line">        Offset:  nextOffset,</span><br><span class="line">    &#125;)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十一、测试流程"><a href="#二十一、测试流程" class="headerlink" title="二十一、测试流程"></a>二十一、测试流程</h2><p>测试 Feed 流可以按这个顺序。</p>
+<p>先准备两个用户：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">A = 粉丝</span><br><span class="line">B = 作者</span><br></pre></td></tr></table></figure>
+
+<p>第一步，A 关注 B：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">PUT /follow/&#123;B的id&#125;/true</span><br></pre></td></tr></table></figure>
+
+<p>第二步，B 登录并发布博客：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">POST /blog</span><br></pre></td></tr></table></figure>
+
+<p>第三步，检查 Redis：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ZRANGE feed:&#123;A的id&#125; 0 -1 WITHSCORES</span><br></pre></td></tr></table></figure>
+
+<p>应该能看到 B 刚发布的博客 ID。</p>
+<p>第四步，A 登录查询关注流：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /blog/of/follow?lastId=当前时间戳&amp;offset=0</span><br></pre></td></tr></table></figure>
+
+<p>应该能看到 B 发布的博客。</p>
+<h2 id="二十二、这一阶段最容易踩的坑"><a href="#二十二、这一阶段最容易踩的坑" class="headerlink" title="二十二、这一阶段最容易踩的坑"></a>二十二、这一阶段最容易踩的坑</h2><h3 id="1-把粉丝和关注对象写反"><a href="#1-把粉丝和关注对象写反" class="headerlink" title="1. 把粉丝和关注对象写反"></a>1. 把粉丝和关注对象写反</h3><p>查粉丝时要查：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">follow_user_id = 当前作者 ID</span><br></pre></td></tr></table></figure>
+
+<p>返回的 <code>user_id</code> 才是粉丝。</p>
+<p>不要写成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">user_id = 当前作者 ID</span><br></pre></td></tr></table></figure>
+
+<p>那查出来的是作者关注了谁。</p>
+<h3 id="2-发布博客后没有拿到-blog-ID"><a href="#2-发布博客后没有拿到-blog-ID" class="headerlink" title="2. 发布博客后没有拿到 blog.ID"></a>2. 发布博客后没有拿到 blog.ID</h3><p>Feed 里推的是博客 ID，所以必须先保存 MySQL。</p>
+<p>GORM 插入后会回填自增主键：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">s.blogRepo.SaveBlog(ctx, &amp;blog)</span><br><span class="line">blog.ID</span><br></pre></td></tr></table></figure>
+
+<h3 id="3-Redis-Feed-里只存-ID"><a href="#3-Redis-Feed-里只存-ID" class="headerlink" title="3. Redis Feed 里只存 ID"></a>3. Redis Feed 里只存 ID</h3><p>不要把整篇博客 JSON 都塞进 Feed。</p>
+<p>Feed 里只存：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blogId + timestamp</span><br></pre></td></tr></table></figure>
+
+<p>详情仍然从 MySQL 查。</p>
+<h3 id="4-MySQL-IN-查询不保证顺序"><a href="#4-MySQL-IN-查询不保证顺序" class="headerlink" title="4. MySQL IN 查询不保证顺序"></a>4. MySQL IN 查询不保证顺序</h3><p>从 Redis 拿到的 ID 是有序的。</p>
+<p>但 MySQL 查询返回顺序不一定一致。</p>
+<p>所以必须按 Redis 的 ID 顺序重新排列。</p>
+<h3 id="5-推模式不会补历史数据"><a href="#5-推模式不会补历史数据" class="headerlink" title="5. 推模式不会补历史数据"></a>5. 推模式不会补历史数据</h3><p>如果 A 今天才关注 B，B 以前发布的博客不会自动进入 A 的 Feed。</p>
+<p>推模式只推送：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">关注关系存在之后新发布的内容</span><br></pre></td></tr></table></figure>
+
+<p>这是正常现象。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>今天这一步把关注模块真正用起来了。</p>
+<p>之前我们实现了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">关注</span><br><span class="line">取关</span><br><span class="line">共同关注</span><br></pre></td></tr></table></figure>
+
+<p>今天在此基础上实现了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">作者发布博客</span><br><span class="line">-&gt; 查粉丝</span><br><span class="line">-&gt; Redis ZSet 推送博客 ID</span><br><span class="line">-&gt; 粉丝查看关注流</span><br><span class="line">-&gt; 滚动分页读取 Feed</span><br></pre></td></tr></table></figure>
+
+<p>Feed 流的核心就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">每个用户一个收件箱 feed:&#123;userId&#125;</span><br><span class="line">作者发布内容时，把内容 ID 推送给所有粉丝</span><br><span class="line">查询时按时间戳倒序滚动分页</span><br></pre></td></tr></table></figure>
+
+<p>这也是 Redis 在黑马点评项目里第一次真正承担“业务数据结构”的角色，而不只是简单缓存。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/" data-id="cuidgrnSay6YhytTpd0-liK4t" data-title="Go 版黑马点评：发布博客与 Redis Feed 流推送详解" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Feed%E6%B5%81/" rel="tag">Feed流</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/06/22/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%85%B3%E6%B3%A8%E3%80%81%E5%8F%96%E5%85%B3%E3%80%81%E5%85%B1%E5%90%8C%E5%85%B3%E6%B3%A8%E4%B8%8ERedisSet%E4%BC%98%E5%8C%96/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">Go 版黑马点评：关注、取关、共同关注与 Redis Set 优化</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/Redis/">Redis</a></li></ul></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feed%E6%B5%81/" rel="tag">Feed流</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nginx/" rel="tag">Nginx</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OSS/" rel="tag">OSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Set/" rel="tag">Set</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%85%B3%E6%B3%A8/" rel="tag">关注</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" rel="tag">后端架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" rel="tag">文件上传</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" rel="tag">短信登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" rel="tag">项目架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" rel="tag">首页接口</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/Feed%E6%B5%81/" style="font-size: 10px;">Feed流</a> <a href="/tags/GORM/" style="font-size: 16.67px;">GORM</a> <a href="/tags/Gin/" style="font-size: 20px;">Gin</a> <a href="/tags/MySQL/" style="font-size: 10px;">MySQL</a> <a href="/tags/Nginx/" style="font-size: 10px;">Nginx</a> <a href="/tags/OSS/" style="font-size: 10px;">OSS</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Set/" style="font-size: 10px;">Set</a> <a href="/tags/Viper/" style="font-size: 13.33px;">Viper</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E5%85%B3%E6%B3%A8/" style="font-size: 10px;">关注</a> <a href="/tags/%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">后端架构</a> <a href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" style="font-size: 10px;">文件上传</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a> <a href="/tags/%E7%9F%AD%E4%BF%A1%E7%99%BB%E5%BD%95/" style="font-size: 10px;">短信登录</a> <a href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">项目架构</a> <a href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" style="font-size: 10px;">首页接口</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/">Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/">Go 版黑马点评：发布博客与 Redis Feed 流推送详解</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/22/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%85%B3%E6%B3%A8%E3%80%81%E5%8F%96%E5%85%B3%E3%80%81%E5%85%B1%E5%90%8C%E5%85%B3%E6%B3%A8%E4%B8%8ERedisSet%E4%BC%98%E5%8C%96/">Go 版黑马点评：关注、取关、共同关注与 Redis Set 优化</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-blog-like-zset/">Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-login-token-middleware/">Go 版黑马点评：登录、Token 与双层拦截器</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 一点甜a<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
