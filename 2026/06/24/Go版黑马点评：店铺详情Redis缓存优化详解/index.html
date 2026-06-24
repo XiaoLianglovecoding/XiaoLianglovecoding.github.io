@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Go 版黑马点评：店铺详情 Redis 缓存优化详解 | 我的Golang学习博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="今天继续推进 Go 版黑马点评后端，这一阶段重点做的是：店铺详情接口的 Redis 缓存优化。 之前的 GET &#x2F;shop&#x2F;:id 已经可以直接查询 MySQL： 1前端 -&gt; Handler -&gt; Service -&gt; Repository -&gt; MySQL  但是只查 MySQL 有一个很明显的问题：店铺详情属于高频访问接口，热门店铺如果每次都查数据库，很容易把 MyS">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go 版黑马点评：店铺详情 Redis 缓存优化详解">
+<meta property="og:url" content="http://example.com/2026/06/24/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%BA%97%E9%93%BA%E8%AF%A6%E6%83%85Redis%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96%E8%AF%A6%E8%A7%A3/index.html">
+<meta property="og:site_name" content="我的Golang学习博客">
+<meta property="og:description" content="今天继续推进 Go 版黑马点评后端，这一阶段重点做的是：店铺详情接口的 Redis 缓存优化。 之前的 GET &#x2F;shop&#x2F;:id 已经可以直接查询 MySQL： 1前端 -&gt; Handler -&gt; Service -&gt; Repository -&gt; MySQL  但是只查 MySQL 有一个很明显的问题：店铺详情属于高频访问接口，热门店铺如果每次都查数据库，很容易把 MyS">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-24T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-24T14:22:22.251Z">
+<meta property="article:author" content="一点甜a">
+<meta property="article:tag" content="GORM">
+<meta property="article:tag" content="Gin">
+<meta property="article:tag" content="Redis">
+<meta property="article:tag" content="缓存">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">我的Golang学习博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">记录用Golang+Redis实现大众点评与学习思考</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-Go版黑马点评：店铺详情Redis缓存优化详解" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/24/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%BA%97%E9%93%BA%E8%AF%A6%E6%83%85Redis%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96%E8%AF%A6%E8%A7%A3/" class="article-date">
+  <time class="dt-published" datetime="2026-06-24T12:00:00.000Z" itemprop="datePublished">2026-06-24</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Go 版黑马点评：店铺详情 Redis 缓存优化详解
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>今天继续推进 Go 版黑马点评后端，这一阶段重点做的是：<strong>店铺详情接口的 Redis 缓存优化</strong>。</p>
+<p>之前的 <code>GET /shop/:id</code> 已经可以直接查询 MySQL：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">前端 -&gt; Handler -&gt; Service -&gt; Repository -&gt; MySQL</span><br></pre></td></tr></table></figure>
+
+<p>但是只查 MySQL 有一个很明显的问题：店铺详情属于高频访问接口，热门店铺如果每次都查数据库，很容易把 MySQL 压力打上去。</p>
+<p>所以今天把它升级成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">前端 -&gt; Handler -&gt; Service -&gt; Redis -&gt; MySQL</span><br></pre></td></tr></table></figure>
+
+<p>而且不是只做最简单的 <code>Get/Set</code>，而是直接做成一个比较完整的版本：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1. 缓存空值，解决缓存穿透</span><br><span class="line">2. 互斥锁，解决缓存未命中时的并发打库</span><br><span class="line">3. 逻辑过期，解决热点店铺缓存击穿</span><br><span class="line">4. 更新店铺后删除缓存，保证数据一致性</span><br></pre></td></tr></table></figure>
+
+<span id="more"></span>
+
+<h2 id="一、为什么店铺详情适合加缓存"><a href="#一、为什么店铺详情适合加缓存" class="headerlink" title="一、为什么店铺详情适合加缓存"></a>一、为什么店铺详情适合加缓存</h2><p>店铺详情接口是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/:id</span><br></pre></td></tr></table></figure>
+
+<p>前端进入店铺详情页时，会根据店铺 id 查询店铺信息。</p>
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://127.0.0.1:8081/shop/1</span><br></pre></td></tr></table></figure>
+
+<p>这个接口的特点是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">读多写少</span><br><span class="line">数据变化不频繁</span><br><span class="line">访问频率高</span><br><span class="line">非常适合缓存</span><br></pre></td></tr></table></figure>
+
+<p>所以它是黑马点评项目里最适合用来学习 Redis 缓存优化的接口之一。</p>
+<h2 id="二、最开始的-MySQL-查询版"><a href="#二、最开始的-MySQL-查询版" class="headerlink" title="二、最开始的 MySQL 查询版"></a>二、最开始的 MySQL 查询版</h2><p>之前的 Service 逻辑很直接：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> QueryByID(ctx context.Context, id <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> id &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid shop id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    shop, err := s.shopRepo.FindShopByID(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shop)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段代码很好理解：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 校验 id</span><br><span class="line">2. 查询数据库</span><br><span class="line">3. 返回店铺</span><br></pre></td></tr></table></figure>
+
+<p>但是问题也很明显：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">每次请求都访问 MySQL</span><br></pre></td></tr></table></figure>
+
+<p>如果首页某个热门店铺被很多用户频繁访问，MySQL 会承担大量重复查询。</p>
+<h2 id="三、这一版的最终查询流程"><a href="#三、这一版的最终查询流程" class="headerlink" title="三、这一版的最终查询流程"></a>三、这一版的最终查询流程</h2><p>今天改完以后，整体查询流程变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/:id</span><br><span class="line">        |</span><br><span class="line">        v</span><br><span class="line">ShopHandler.QueryShopByID</span><br><span class="line">        |</span><br><span class="line">        v</span><br><span class="line">ShopService.QueryByID</span><br><span class="line">        |</span><br><span class="line">        v</span><br><span class="line">queryShopByIDWithCache</span><br><span class="line">        |</span><br><span class="line">        +--&gt; 先查 Redis</span><br><span class="line">                |</span><br><span class="line">                +--&gt; 命中正常数据：直接返回</span><br><span class="line">                |</span><br><span class="line">                +--&gt; 命中空字符串：说明店铺不存在</span><br><span class="line">                |</span><br><span class="line">                +--&gt; 命中但逻辑过期：先返回旧数据，后台重建缓存</span><br><span class="line">                |</span><br><span class="line">                +--&gt; 完全未命中：抢互斥锁，查 MySQL，写 Redis</span><br></pre></td></tr></table></figure>
+
+<p>这个流程比简单缓存多了几个关键判断。</p>
+<p>因为真实项目里缓存不是一句 <code>redis.Get()</code> 就结束了，还要考虑异常情况和高并发问题。</p>
+<h2 id="四、Redis-key-设计"><a href="#四、Redis-key-设计" class="headerlink" title="四、Redis key 设计"></a>四、Redis key 设计</h2><p>这部分 key 已经统一放在常量文件里：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> (</span><br><span class="line">    CacheShopKey = <span class="string">&quot;cache:shop:&quot;</span></span><br><span class="line">    LockShopKey  = <span class="string">&quot;lock:shop:&quot;</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>所以店铺详情缓存的 key 是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cache:shop:&#123;id&#125;</span><br></pre></td></tr></table></figure>
+
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">cache:shop:1</span><br><span class="line">cache:shop:2</span><br></pre></td></tr></table></figure>
+
+<p>互斥锁的 key 是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">lock:shop:&#123;id&#125;</span><br></pre></td></tr></table></figure>
+
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">lock:shop:1</span><br></pre></td></tr></table></figure>
+
+<p>这样不同店铺之间互不影响。</p>
+<h2 id="五、缓存数据结构：为什么要包一层"><a href="#五、缓存数据结构：为什么要包一层" class="headerlink" title="五、缓存数据结构：为什么要包一层"></a>五、缓存数据结构：为什么要包一层</h2><p>今天新增了一个缓存包装结构：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> shopCacheData <span class="keyword">struct</span> &#123;</span><br><span class="line">    Data       model.Shop <span class="string">`json:&quot;data&quot;`</span></span><br><span class="line">    ExpireTime time.Time  <span class="string">`json:&quot;expireTime&quot;`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里没有直接把 <code>model.Shop</code> 存进 Redis，而是外面又包了一层。</p>
+<p>原因是我们要做逻辑过期。</p>
+<p>Redis 里实际保存的大概是这样：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;id&quot;</span><span class="punctuation">:</span> <span class="number">1</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;103茶餐厅&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;typeId&quot;</span><span class="punctuation">:</span> <span class="number">1</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;address&quot;</span><span class="punctuation">:</span> <span class="string">&quot;金华路锦昌文华苑29号&quot;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;expireTime&quot;</span><span class="punctuation">:</span> <span class="string">&quot;2026-06-24T20:30:00+08:00&quot;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>这里的 <code>expireTime</code> 不是 Redis 自己的 TTL，而是业务层自己判断的过期时间。</p>
+<p>也就是说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Redis key 可以一直存在</span><br><span class="line">但业务代码发现 expireTime 过期后，会主动重建缓存</span><br></pre></td></tr></table></figure>
+
+<p>这就是逻辑过期。</p>
+<h2 id="六、QueryByID：入口方法只负责组织结果"><a href="#六、QueryByID：入口方法只负责组织结果" class="headerlink" title="六、QueryByID：入口方法只负责组织结果"></a>六、QueryByID：入口方法只负责组织结果</h2><p>最终 <code>QueryByID</code> 保持得很干净：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> QueryByID(ctx context.Context, id <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> id &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid shop id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    shop, err := s.queryShopByIDWithCache(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, errShopNotFound) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;shop not found&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[ShopService.QueryByID] query shop failed, id=%d, err=%v&quot;</span>, id, err)</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query shop failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(shop)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里我把复杂缓存逻辑下沉到了：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">queryShopByIDWithCache</span><br></pre></td></tr></table></figure>
+
+<p>这样入口方法只做三件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 校验参数</span><br><span class="line">2. 调用缓存查询方法</span><br><span class="line">3. 包装统一返回结果</span><br></pre></td></tr></table></figure>
+
+<p>这也符合 Service 层代码的阅读习惯。</p>
+<h2 id="七、核心方法：queryShopByIDWithCache"><a href="#七、核心方法：queryShopByIDWithCache" class="headerlink" title="七、核心方法：queryShopByIDWithCache"></a>七、核心方法：queryShopByIDWithCache</h2><p>这是店铺详情缓存查询的核心入口：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> queryShopByIDWithCache(ctx context.Context, id <span class="type">int64</span>) (*model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    shop, hit, expired, err := s.getShopFromCache(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Redis 有缓存，并且没有逻辑过期，直接返回。</span></span><br><span class="line">    <span class="keyword">if</span> hit &amp;&amp; !expired &#123;</span><br><span class="line">        <span class="keyword">return</span> shop, <span class="literal">nil</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Redis 有缓存，但逻辑已经过期。</span></span><br><span class="line">    <span class="comment">// 此时仍然先返回旧数据，保证用户请求不被 MySQL 阻塞；</span></span><br><span class="line">    <span class="comment">// 同时只有抢到锁的请求负责后台重建缓存。</span></span><br><span class="line">    <span class="keyword">if</span> hit &amp;&amp; expired &#123;</span><br><span class="line">        s.rebuildShopCacheAsync(id)</span><br><span class="line">        <span class="keyword">return</span> shop, <span class="literal">nil</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Redis 完全没有缓存，说明可能是冷启动或 key 被删除。</span></span><br><span class="line">    <span class="comment">// 这种情况不能返回旧数据，只能走互斥锁同步重建。</span></span><br><span class="line">    <span class="keyword">return</span> s.queryShopOnCacheMiss(ctx, id)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个方法把 Redis 查询结果分成三种情况。</p>
+<h3 id="1-命中且没过期"><a href="#1-命中且没过期" class="headerlink" title="1. 命中且没过期"></a>1. 命中且没过期</h3><p>这是最理想的情况：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Redis 有数据</span><br><span class="line">expireTime 还没过</span><br><span class="line">直接返回</span><br></pre></td></tr></table></figure>
+
+<p>这种情况下不会访问 MySQL。</p>
+<h3 id="2-命中但逻辑过期"><a href="#2-命中但逻辑过期" class="headerlink" title="2. 命中但逻辑过期"></a>2. 命中但逻辑过期</h3><p>这是热点缓存的关键：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Redis 有旧数据</span><br><span class="line">但 expireTime 已经过期</span><br></pre></td></tr></table></figure>
+
+<p>这时我没有让当前请求等待 MySQL，而是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">先返回旧数据</span><br><span class="line">后台开 goroutine 重建缓存</span><br></pre></td></tr></table></figure>
+
+<p>这样前端响应会很快。</p>
+<p>缺点是用户短时间内可能看到旧数据，但店铺详情这种读多写少的场景可以接受。</p>
+<h3 id="3-完全未命中"><a href="#3-完全未命中" class="headerlink" title="3. 完全未命中"></a>3. 完全未命中</h3><p>如果 Redis 连旧数据都没有，就不能返回了。</p>
+<p>这种情况只能查 MySQL。</p>
+<p>但为了避免高并发下大量请求同时查 MySQL，需要使用互斥锁。</p>
+<p>所以进入：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">queryShopOnCacheMiss</span><br></pre></td></tr></table></figure>
+
+<h2 id="八、读取缓存：getShopFromCache"><a href="#八、读取缓存：getShopFromCache" class="headerlink" title="八、读取缓存：getShopFromCache"></a>八、读取缓存：getShopFromCache</h2><p>读取 Redis 的方法是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> getShopFromCache(ctx context.Context, id <span class="type">int64</span>) (*model.Shop, <span class="type">bool</span>, <span class="type">bool</span>, <span class="type">error</span>) &#123;</span><br><span class="line">    key := constants.CacheShopKey + strconv.FormatInt(id, <span class="number">10</span>)</span><br><span class="line"></span><br><span class="line">    cacheValue, err := s.redisClient.Get(ctx, key).Result()</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, redis.Nil) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, <span class="literal">false</span>, <span class="literal">false</span>, <span class="literal">nil</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, <span class="literal">false</span>, <span class="literal">false</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 命中空字符串，代表这个店铺在 MySQL 里不存在。</span></span><br><span class="line">    <span class="comment">// 这是“缓存空值”，专门用来解决缓存穿透。</span></span><br><span class="line">    <span class="keyword">if</span> cacheValue == <span class="string">&quot;&quot;</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, <span class="literal">true</span>, <span class="literal">false</span>, errShopNotFound</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">var</span> cacheData shopCacheData</span><br><span class="line">    <span class="keyword">if</span> err := json.Unmarshal([]<span class="type">byte</span>(cacheValue), &amp;cacheData); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="comment">// 如果缓存格式坏了，删除这个 key，让下一次请求重新加载。</span></span><br><span class="line">        log.Printf(<span class="string">&quot;[ShopService.getShopFromCache] invalid cache json, key=%s, err=%v&quot;</span>, key, err)</span><br><span class="line">        _ = s.redisClient.Del(ctx, key).Err()</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, <span class="literal">false</span>, <span class="literal">false</span>, <span class="literal">nil</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    expired := time.Now().After(cacheData.ExpireTime)</span><br><span class="line">    <span class="keyword">return</span> &amp;cacheData.Data, <span class="literal">true</span>, expired, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个方法的返回值比较多：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">shop     店铺数据</span><br><span class="line">hit      Redis 是否命中</span><br><span class="line">expired  逻辑过期时间是否过期</span><br><span class="line">err      错误</span><br></pre></td></tr></table></figure>
+
+<p>这么设计是为了把缓存状态表达清楚。</p>
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">redis.Nil          -&gt; hit = false</span><br><span class="line">空字符串            -&gt; hit = true, err = errShopNotFound</span><br><span class="line">正常 JSON 未过期     -&gt; hit = true, expired = false</span><br><span class="line">正常 JSON 已过期     -&gt; hit = true, expired = true</span><br><span class="line">JSON 格式坏了        -&gt; 删除 key，然后当作没命中</span><br></pre></td></tr></table></figure>
+
+<h2 id="九、缓存穿透：为什么要缓存空字符串"><a href="#九、缓存穿透：为什么要缓存空字符串" class="headerlink" title="九、缓存穿透：为什么要缓存空字符串"></a>九、缓存穿透：为什么要缓存空字符串</h2><p>缓存穿透指的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">请求查询一个数据库根本不存在的数据</span><br><span class="line">Redis 也没有</span><br><span class="line">于是每次都打到 MySQL</span><br></pre></td></tr></table></figure>
+
+<p>比如有人一直请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/shop/99999999</span><br></pre></td></tr></table></figure>
+
+<p>如果数据库没有这个店铺，而我们又不缓存这个结果，那么每次请求都会访问 MySQL。</p>
+<p>解决方式是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">数据库查不到</span><br><span class="line">Redis 写入空字符串</span><br><span class="line">设置较短 TTL</span><br></pre></td></tr></table></figure>
+
+<p>代码是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> setShopNullCache(ctx context.Context, id <span class="type">int64</span>) <span class="type">error</span> &#123;</span><br><span class="line">    key := constants.CacheShopKey + strconv.FormatInt(id, <span class="number">10</span>)</span><br><span class="line">    <span class="keyword">return</span> s.redisClient.Set(</span><br><span class="line">        ctx,</span><br><span class="line">        key,</span><br><span class="line">        <span class="string">&quot;&quot;</span>,</span><br><span class="line">        time.Duration(constants.CacheNullTTLMinutes)*time.Minute,</span><br><span class="line">    ).Err()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的值是空字符串：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&quot;&quot;</span><br></pre></td></tr></table></figure>
+
+<p>TTL 用的是短时间：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">2 分钟</span><br></pre></td></tr></table></figure>
+
+<p>为什么要短一点？</p>
+<p>因为这个店铺现在不存在，不代表未来一定不存在。</p>
+<p>比如后台管理员以后新建了这个 id 对应的店铺，如果空值缓存时间太长，用户就会一直查不到。</p>
+<h2 id="十、缓存未命中：用互斥锁保护-MySQL"><a href="#十、缓存未命中：用互斥锁保护-MySQL" class="headerlink" title="十、缓存未命中：用互斥锁保护 MySQL"></a>十、缓存未命中：用互斥锁保护 MySQL</h2><p>Redis 完全未命中时，代码进入：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> queryShopOnCacheMiss(ctx context.Context, id <span class="type">int64</span>) (*model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    lockKey := constants.LockShopKey + strconv.FormatInt(id, <span class="number">10</span>)</span><br><span class="line"></span><br><span class="line">    locked, err := s.tryLock(ctx, lockKey)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> !locked &#123;</span><br><span class="line">        timer := time.NewTimer(<span class="number">50</span> * time.Millisecond)</span><br><span class="line">        <span class="keyword">defer</span> timer.Stop()</span><br><span class="line"></span><br><span class="line">        <span class="keyword">select</span> &#123;</span><br><span class="line">        <span class="keyword">case</span> &lt;-ctx.Done():</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">nil</span>, ctx.Err()</span><br><span class="line">        <span class="keyword">case</span> &lt;-timer.C:</span><br><span class="line">            <span class="keyword">return</span> s.queryShopByIDWithCache(ctx, id)</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">defer</span> s.unlock(context.Background(), lockKey)</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 双重检查：</span></span><br><span class="line">    <span class="comment">// 抢到锁后再查一次 Redis，避免“前一个请求刚写完缓存，当前请求又查一次 MySQL”。</span></span><br><span class="line">    shop, hit, _, err := s.getShopFromCache(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> hit &#123;</span><br><span class="line">        <span class="keyword">return</span> shop, <span class="literal">nil</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> s.rebuildShopCache(ctx, id)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段逻辑很重要。</p>
+<p>当大量请求同时发现 Redis 没有缓存时，如果不加锁，流程会变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">请求 1 -&gt; 查 MySQL</span><br><span class="line">请求 2 -&gt; 查 MySQL</span><br><span class="line">请求 3 -&gt; 查 MySQL</span><br><span class="line">请求 4 -&gt; 查 MySQL</span><br></pre></td></tr></table></figure>
+
+<p>加了锁之后变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">请求 1 -&gt; 抢到锁 -&gt; 查 MySQL -&gt; 写 Redis</span><br><span class="line">请求 2 -&gt; 没抢到锁 -&gt; 等 50ms -&gt; 重新查 Redis</span><br><span class="line">请求 3 -&gt; 没抢到锁 -&gt; 等 50ms -&gt; 重新查 Redis</span><br><span class="line">请求 4 -&gt; 没抢到锁 -&gt; 等 50ms -&gt; 重新查 Redis</span><br></pre></td></tr></table></figure>
+
+<p>这样只有一个请求真正访问 MySQL。</p>
+<p>其他请求等缓存写好后直接读 Redis。</p>
+<h2 id="十一、Redis-互斥锁的实现"><a href="#十一、Redis-互斥锁的实现" class="headerlink" title="十一、Redis 互斥锁的实现"></a>十一、Redis 互斥锁的实现</h2><p>互斥锁用的是 Redis 的 <code>SETNX</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> tryLock(ctx context.Context, key <span class="type">string</span>) (<span class="type">bool</span>, <span class="type">error</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> s.redisClient.SetNX(</span><br><span class="line">        ctx,</span><br><span class="line">        key,</span><br><span class="line">        <span class="string">&quot;1&quot;</span>,</span><br><span class="line">        time.Duration(constants.LockShopTTLSeconds)*time.Second,</span><br><span class="line">    ).Result()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个命令的含义是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">如果 key 不存在，就设置成功</span><br><span class="line">如果 key 已存在，就设置失败</span><br></pre></td></tr></table></figure>
+
+<p>锁的过期时间是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">10 秒</span><br></pre></td></tr></table></figure>
+
+<p>为什么锁要有过期时间？</p>
+<p>因为如果某个请求抢到锁后程序崩了，锁不自动过期的话，后面的请求就永远抢不到锁。</p>
+<p>释放锁的代码是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> unlock(ctx context.Context, key <span class="type">string</span>) &#123;</span><br><span class="line">    <span class="keyword">if</span> err := s.redisClient.Del(ctx, key).Err(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[ShopService.unlock] unlock failed, key=%s, err=%v&quot;</span>, key, err)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>学习阶段这样写已经够用了。</p>
+<p>更严谨的分布式锁还要考虑：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">锁 value 唯一标识</span><br><span class="line">Lua 脚本保证判断和删除原子性</span><br><span class="line">Redisson 风格的看门狗续期</span><br></pre></td></tr></table></figure>
+
+<p>这些可以等秒杀阶段再深入。</p>
+<h2 id="十二、双重检查：为什么抢到锁后还要再查-Redis"><a href="#十二、双重检查：为什么抢到锁后还要再查-Redis" class="headerlink" title="十二、双重检查：为什么抢到锁后还要再查 Redis"></a>十二、双重检查：为什么抢到锁后还要再查 Redis</h2><p>代码里有一段很容易忽略：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">shop, hit, _, err := s.getShopFromCache(ctx, id)</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> hit &#123;</span><br><span class="line">    <span class="keyword">return</span> shop, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>它的作用是双重检查。</p>
+<p>假设两个请求同时进来：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">请求 A 发现 Redis 没有缓存</span><br><span class="line">请求 B 发现 Redis 没有缓存</span><br></pre></td></tr></table></figure>
+
+<p>请求 A 先抢到锁，查询 MySQL，写入 Redis，然后释放锁。</p>
+<p>请求 B 等待后也抢到了锁。</p>
+<p>如果请求 B 不再检查 Redis，就会再次查询 MySQL。</p>
+<p>所以抢到锁后必须再查一次 Redis。</p>
+<p>这可以减少一次不必要的数据库查询。</p>
+<h2 id="十三、重建缓存：rebuildShopCache"><a href="#十三、重建缓存：rebuildShopCache" class="headerlink" title="十三、重建缓存：rebuildShopCache"></a>十三、重建缓存：rebuildShopCache</h2><p>真正查 MySQL 并写 Redis 的方法是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> rebuildShopCache(ctx context.Context, id <span class="type">int64</span>) (*model.Shop, <span class="type">error</span>) &#123;</span><br><span class="line">    shop, err := s.shopRepo.FindShopByID(ctx, id)</span><br><span class="line">    <span class="keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) &#123;</span><br><span class="line">        <span class="comment">// 数据库也没有，缓存空字符串，避免同一个非法 id 反复打到 MySQL。</span></span><br><span class="line">        <span class="keyword">if</span> cacheErr := s.setShopNullCache(ctx, id); cacheErr != <span class="literal">nil</span> &#123;</span><br><span class="line">            log.Printf(<span class="string">&quot;[ShopService.rebuildShopCache] set null cache failed, id=%d, err=%v&quot;</span>, id, cacheErr)</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, errShopNotFound</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err := s.setShopWithLogicalExpire(ctx, *shop); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> shop, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个方法处理两种情况：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">MySQL 查不到 -&gt; 写空值缓存</span><br><span class="line">MySQL 查到了 -&gt; 写逻辑过期缓存</span><br></pre></td></tr></table></figure>
+
+<p>注意：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">errors.Is(err, gorm.ErrRecordNotFound)</span><br></pre></td></tr></table></figure>
+
+<p>这是专门判断 GORM 的“记录不存在”错误。</p>
+<p>不要把“记录不存在”和“数据库异常”混在一起。</p>
+<h2 id="十四、写入逻辑过期缓存"><a href="#十四、写入逻辑过期缓存" class="headerlink" title="十四、写入逻辑过期缓存"></a>十四、写入逻辑过期缓存</h2><p>写入正常店铺缓存的代码是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> setShopWithLogicalExpire(ctx context.Context, shop model.Shop) <span class="type">error</span> &#123;</span><br><span class="line">    key := constants.CacheShopKey + strconv.FormatInt(shop.ID, <span class="number">10</span>)</span><br><span class="line">    expireDuration := shopCacheLogicalExpireDuration(shop.ID)</span><br><span class="line"></span><br><span class="line">    cacheData := shopCacheData&#123;</span><br><span class="line">        Data:       shop,</span><br><span class="line">        ExpireTime: time.Now().Add(expireDuration),</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    cacheBytes, err := json.Marshal(cacheData)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 逻辑过期模式下，Redis key 本身不设置 TTL。</span></span><br><span class="line">    <span class="comment">// 是否过期由 cacheData.ExpireTime 判断。</span></span><br><span class="line">    <span class="keyword">return</span> s.redisClient.Set(ctx, key, cacheBytes, <span class="number">0</span>).Err()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里最关键的是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">s.redisClient.Set(ctx, key, cacheBytes, <span class="number">0</span>)</span><br></pre></td></tr></table></figure>
+
+<p>最后一个参数是 <code>0</code>。</p>
+<p>它表示 Redis key 本身没有 TTL。</p>
+<p>过期判断交给业务字段：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ExpireTime</span><br></pre></td></tr></table></figure>
+
+<p>这就是逻辑过期和普通 TTL 的区别。</p>
+<p>普通 TTL：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Redis 到期后自动删除 key</span><br></pre></td></tr></table></figure>
+
+<p>逻辑过期：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Redis key 还在</span><br><span class="line">业务代码判断 expireTime 是否过期</span><br></pre></td></tr></table></figure>
+
+<h2 id="十五、逻辑过期：为什么可以解决热点缓存击穿"><a href="#十五、逻辑过期：为什么可以解决热点缓存击穿" class="headerlink" title="十五、逻辑过期：为什么可以解决热点缓存击穿"></a>十五、逻辑过期：为什么可以解决热点缓存击穿</h2><p>缓存击穿通常发生在：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">某个热点 key 刚好过期</span><br><span class="line">大量请求同时访问</span><br><span class="line">全部打到 MySQL</span><br></pre></td></tr></table></figure>
+
+<p>如果用普通 TTL，key 过期后 Redis 里真的没有数据。</p>
+<p>请求只能查 MySQL。</p>
+<p>逻辑过期的好处是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">即使逻辑过期，Redis 里仍然有旧数据</span><br></pre></td></tr></table></figure>
+
+<p>所以当热点店铺过期时：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">请求仍然可以先拿到旧数据</span><br><span class="line">只有一个请求负责后台重建缓存</span><br></pre></td></tr></table></figure>
+
+<p>用户体验更稳定，MySQL 也不会被突然打爆。</p>
+<h2 id="十六、后台异步重建缓存"><a href="#十六、后台异步重建缓存" class="headerlink" title="十六、后台异步重建缓存"></a>十六、后台异步重建缓存</h2><p>逻辑过期后，重建缓存的代码是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> rebuildShopCacheAsync(id <span class="type">int64</span>) &#123;</span><br><span class="line">    lockKey := constants.LockShopKey + strconv.FormatInt(id, <span class="number">10</span>)</span><br><span class="line"></span><br><span class="line">    locked, err := s.tryLock(context.Background(), lockKey)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> || !locked &#123;</span><br><span class="line">        <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">            log.Printf(<span class="string">&quot;[ShopService.rebuildShopCacheAsync] try lock failed, id=%d, err=%v&quot;</span>, id, err)</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">        ctx, cancel := context.WithTimeout(context.Background(), <span class="number">5</span>*time.Second)</span><br><span class="line">        <span class="keyword">defer</span> cancel()</span><br><span class="line">        <span class="keyword">defer</span> s.unlock(context.Background(), lockKey)</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> _, err := s.rebuildShopCache(ctx, id); err != <span class="literal">nil</span> &amp;&amp; !errors.Is(err, errShopNotFound) &#123;</span><br><span class="line">            log.Printf(<span class="string">&quot;[ShopService.rebuildShopCacheAsync] rebuild cache failed, id=%d, err=%v&quot;</span>, id, err)</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里有几个重点。</p>
+<p>第一，先抢锁：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">locked, err := s.tryLock(context.Background(), lockKey)</span><br></pre></td></tr></table></figure>
+
+<p>只有抢到锁的请求才会开 goroutine。</p>
+<p>第二，用 goroutine 后台重建：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">    ...</span><br><span class="line">&#125;()</span><br></pre></td></tr></table></figure>
+
+<p>这样当前请求不需要等待 MySQL。</p>
+<p>第三，给后台任务设置超时时间：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ctx, cancel := context.WithTimeout(context.Background(), <span class="number">5</span>*time.Second)</span><br></pre></td></tr></table></figure>
+
+<p>避免后台任务一直卡住。</p>
+<p>第四，重建结束释放锁：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">defer</span> s.unlock(context.Background(), lockKey)</span><br></pre></td></tr></table></figure>
+
+<h2 id="十七、过期时间扰动：避免集中重建"><a href="#十七、过期时间扰动：避免集中重建" class="headerlink" title="十七、过期时间扰动：避免集中重建"></a>十七、过期时间扰动：避免集中重建</h2><p>今天还加了一个小细节：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">shopCacheLogicalExpireDuration</span><span class="params">(id <span class="type">int64</span>)</span></span> time.Duration &#123;</span><br><span class="line">    base := time.Duration(constants.CacheShopTTLMinutes) * time.Minute</span><br><span class="line">    jitter := time.Duration(id%<span class="number">10</span>) * time.Minute</span><br><span class="line">    <span class="keyword">return</span> base + jitter</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>基础逻辑过期时间是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">30 分钟</span><br></pre></td></tr></table></figure>
+
+<p>然后根据店铺 id 加一点扰动：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">id % 10 分钟</span><br></pre></td></tr></table></figure>
+
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">shop:1 -&gt; 31 分钟</span><br><span class="line">shop:2 -&gt; 32 分钟</span><br><span class="line">shop:3 -&gt; 33 分钟</span><br></pre></td></tr></table></figure>
+
+<p>这么做是为了避免很多缓存同时写入后，又在同一分钟同时逻辑过期。</p>
+<p>这属于缓存雪崩方向的小优化。</p>
+<h2 id="十八、更新店铺后删除缓存"><a href="#十八、更新店铺后删除缓存" class="headerlink" title="十八、更新店铺后删除缓存"></a>十八、更新店铺后删除缓存</h2><p>缓存还有一个很重要的问题：数据一致性。</p>
+<p>如果店铺信息更新了，但 Redis 里还是旧数据，那么用户会看到旧店铺信息。</p>
+<p>所以更新店铺时要：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">先更新 MySQL</span><br><span class="line">再删除 Redis 缓存</span><br></pre></td></tr></table></figure>
+
+<p>Service 层代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *shopService)</span></span> UpdateShop(ctx context.Context, shop model.Shop) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> shop.ID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid shop id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err := s.shopRepo.UpdateShop(ctx, &amp;shop); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[ShopService.UpdateShop] update shop failed, id=%d, err=%v&quot;</span>, shop.ID, err)</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;update shop failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 先更新数据库，再删除缓存。</span></span><br><span class="line">    <span class="comment">// 这样下一次查询会重新从 MySQL 加载新数据，避免长期返回旧店铺信息。</span></span><br><span class="line">    key := constants.CacheShopKey + strconv.FormatInt(shop.ID, <span class="number">10</span>)</span><br><span class="line">    <span class="keyword">if</span> err := s.redisClient.Del(ctx, key).Err(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[ShopService.UpdateShop] delete shop cache failed, key=%s, err=%v&quot;</span>, key, err)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OK()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里没有选择“更新数据库后直接更新缓存”，而是删除缓存。</p>
+<p>原因是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">删除缓存更简单</span><br><span class="line">下一次查询时自然会重新加载最新数据</span><br></pre></td></tr></table></figure>
+
+<h2 id="十九、Repository-层只负责数据库"><a href="#十九、Repository-层只负责数据库" class="headerlink" title="十九、Repository 层只负责数据库"></a>十九、Repository 层只负责数据库</h2><p>Repository 层补了真正的更新逻辑：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *shopRepository)</span></span> UpdateShop(ctx context.Context, shop *model.Shop) <span class="type">error</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> shop == <span class="literal">nil</span> || shop.ID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> errors.New(<span class="string">&quot;invalid shop&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> r.db.WithContext(ctx).</span><br><span class="line">        Model(&amp;model.Shop&#123;&#125;).</span><br><span class="line">        Where(<span class="string">&quot;id = ?&quot;</span>, shop.ID).</span><br><span class="line">        Updates(shop).Error</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里 Repository 不关心 Redis。</p>
+<p>它只负责：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">更新 tb_shop</span><br></pre></td></tr></table></figure>
+
+<p>缓存删除放在 Service 层。</p>
+<p>这样分层更清楚：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Handler     负责接收请求</span><br><span class="line">Service     负责业务流程和缓存策略</span><br><span class="line">Repository  负责数据库访问</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十、完整链路回顾"><a href="#二十、完整链路回顾" class="headerlink" title="二十、完整链路回顾"></a>二十、完整链路回顾</h2><p>现在查询店铺详情的完整链路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">1. 前端请求 GET /shop/1</span><br><span class="line">2. Handler 解析路径参数 id</span><br><span class="line">3. Service 查询 Redis</span><br><span class="line">4. Redis 命中且未过期，直接返回</span><br><span class="line">5. Redis 命中但逻辑过期，返回旧数据并异步重建</span><br><span class="line">6. Redis 未命中，尝试获取 lock:shop:1</span><br><span class="line">7. 抢到锁后查 MySQL</span><br><span class="line">8. MySQL 有数据，写入逻辑过期缓存</span><br><span class="line">9. MySQL 没数据，写入空值缓存</span><br><span class="line">10. 返回统一 Result</span><br></pre></td></tr></table></figure>
+
+<p>更新店铺的链路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">1. 前端请求 PUT /shop</span><br><span class="line">2. Handler 绑定 JSON</span><br><span class="line">3. Service 校验 id</span><br><span class="line">4. Repository 更新 MySQL</span><br><span class="line">5. Service 删除 cache:shop:&#123;id&#125;</span><br><span class="line">6. 返回成功</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十一、如何测试"><a href="#二十一、如何测试" class="headerlink" title="二十一、如何测试"></a>二十一、如何测试</h2><p>可以先清掉某个店铺缓存：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">DEL cache:shop:1</span><br></pre></td></tr></table></figure>
+
+<p>第一次访问：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">curl http://127.0.0.1:8081/shop/1</span><br></pre></td></tr></table></figure>
+
+<p>这次应该会：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Redis 未命中</span><br><span class="line">查 MySQL</span><br><span class="line">写入 cache:shop:1</span><br></pre></td></tr></table></figure>
+
+<p>第二次访问：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">curl http://127.0.0.1:8081/shop/1</span><br></pre></td></tr></table></figure>
+
+<p>这次应该直接命中 Redis。</p>
+<p>查看 Redis：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET cache:shop:1</span><br></pre></td></tr></table></figure>
+
+<p>可以看到里面有：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">data</span><br><span class="line">expireTime</span><br></pre></td></tr></table></figure>
+
+<p>测试不存在的店铺：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">curl http://127.0.0.1:8081/shop/99999999</span><br></pre></td></tr></table></figure>
+
+<p>然后查看 Redis：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">GET cache:shop:99999999</span><br><span class="line">TTL cache:shop:99999999</span><br></pre></td></tr></table></figure>
+
+<p>应该能看到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">值是空字符串</span><br><span class="line">TTL 是短时间</span><br></pre></td></tr></table></figure>
+
+<h2 id="二十二、今天这版和普通缓存的区别"><a href="#二十二、今天这版和普通缓存的区别" class="headerlink" title="二十二、今天这版和普通缓存的区别"></a>二十二、今天这版和普通缓存的区别</h2><p>普通缓存通常是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">查 Redis</span><br><span class="line">Redis 没有就查 MySQL</span><br><span class="line">查到后写 Redis</span><br></pre></td></tr></table></figure>
+
+<p>今天这版多了很多真实项目里会用到的保护措施：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">缓存空值       -&gt; 防止非法 id 穿透到 MySQL</span><br><span class="line">互斥锁         -&gt; 防止缓存未命中时大量请求同时打库</span><br><span class="line">逻辑过期       -&gt; 防止热点 key 过期瞬间打爆数据库</span><br><span class="line">异步重建       -&gt; 保证用户请求不被慢查询阻塞</span><br><span class="line">双重检查       -&gt; 避免抢锁后重复查询数据库</span><br><span class="line">过期时间扰动   -&gt; 降低集中重建风险</span><br><span class="line">更新后删缓存   -&gt; 降低读到旧数据的概率</span><br></pre></td></tr></table></figure>
+
+<p>这就是从“能用”到“更接近真实项目”的差别。</p>
+<h2 id="二十三、这一版还可以继续优化的地方"><a href="#二十三、这一版还可以继续优化的地方" class="headerlink" title="二十三、这一版还可以继续优化的地方"></a>二十三、这一版还可以继续优化的地方</h2><p>学习阶段这版已经够用了，但真正生产环境里还可以继续优化。</p>
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">1. Redis 锁使用唯一 value，避免误删别人的锁</span><br><span class="line">2. 释放锁使用 Lua 脚本，保证判断和删除的原子性</span><br><span class="line">3. 缓存重建失败可以增加重试机制</span><br><span class="line">4. 热点店铺可以在服务启动时提前预热</span><br><span class="line">5. 更新缓存可以接入消息队列，做异步删除或延迟双删</span><br><span class="line">6. 店铺列表可以结合 Redis GEO 做附近商户查询</span><br></pre></td></tr></table></figure>
+
+<p>这些可以留到后面的秒杀和附近商户阶段继续学习。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>今天这一步把店铺详情接口从 MySQL 查询版升级成了 Redis 缓存优化版。</p>
+<p>最终实现的能力是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">GET /shop/:id</span><br><span class="line">-&gt; Redis 缓存查询</span><br><span class="line">-&gt; 缓存空值防穿透</span><br><span class="line">-&gt; 互斥锁防并发打库</span><br><span class="line">-&gt; 逻辑过期防热点击穿</span><br><span class="line">-&gt; 异步重建提高响应速度</span><br></pre></td></tr></table></figure>
+
+<p>这一块是 Redis 实战里非常重要的基础。</p>
+<p>它让我更清楚地理解了一件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">缓存不是简单地把数据放进 Redis。</span><br><span class="line">真正重要的是：在高并发、异常数据、热点数据、数据更新这些场景下，缓存还能不能稳定工作。</span><br></pre></td></tr></table></figure>
+
+<p>店铺详情缓存学完之后，后面再学习秒杀、附近商户 GEO、签到 BitMap，会顺很多。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/24/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%BA%97%E9%93%BA%E8%AF%A6%E6%83%85Redis%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96%E8%AF%A6%E8%A7%A3/" data-id="cuidJHIeAB-11UWJayJvyD0CJ" data-title="Go 版黑马点评：店铺详情 Redis 缓存优化详解" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%BC%93%E5%AD%98/" rel="tag">缓存</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feed%E6%B5%81/" rel="tag">Feed流</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nginx/" rel="tag">Nginx</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OSS/" rel="tag">OSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Set/" rel="tag">Set</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%85%B3%E6%B3%A8/" rel="tag">关注</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" rel="tag">文件上传</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BC%93%E5%AD%98/" rel="tag">缓存</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" rel="tag">项目架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" rel="tag">首页接口</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/Feed%E6%B5%81/" style="font-size: 10px;">Feed流</a> <a href="/tags/GORM/" style="font-size: 15px;">GORM</a> <a href="/tags/Gin/" style="font-size: 20px;">Gin</a> <a href="/tags/MySQL/" style="font-size: 10px;">MySQL</a> <a href="/tags/Nginx/" style="font-size: 10px;">Nginx</a> <a href="/tags/OSS/" style="font-size: 10px;">OSS</a> <a href="/tags/Redis/" style="font-size: 15px;">Redis</a> <a href="/tags/Set/" style="font-size: 10px;">Set</a> <a href="/tags/Viper/" style="font-size: 10px;">Viper</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E5%85%B3%E6%B3%A8/" style="font-size: 10px;">关注</a> <a href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" style="font-size: 10px;">文件上传</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a> <a href="/tags/%E7%BC%93%E5%AD%98/" style="font-size: 10px;">缓存</a> <a href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">项目架构</a> <a href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" style="font-size: 10px;">首页接口</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/06/24/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%BA%97%E9%93%BA%E8%AF%A6%E6%83%85Redis%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96%E8%AF%A6%E8%A7%A3/">Go 版黑马点评：店铺详情 Redis 缓存优化详解</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/">Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/">Go 版黑马点评：发布博客与 Redis Feed 流推送详解</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/22/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%85%B3%E6%B3%A8%E3%80%81%E5%8F%96%E5%85%B3%E3%80%81%E5%85%B1%E5%90%8C%E5%85%B3%E6%B3%A8%E4%B8%8ERedisSet%E4%BC%98%E5%8C%96/">Go 版黑马点评：关注、取关、共同关注与 Redis Set 优化</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/21/go-hmdp-blog-like-zset/">Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 一点甜a<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
