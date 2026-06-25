@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   
   
-  <title>Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填 | 我的Golang学习博客</title>
+  <title>Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填 | XiaoLiang的学习博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <meta name="description" content="这两天我在 Go 版黑马点评里实现了博客点赞相关功能，包括：  PUT &#x2F;blog&#x2F;like&#x2F;:id 点赞或取消点赞 GET &#x2F;blog&#x2F;likes&#x2F;:id 查询点赞用户 Top5 GET &#x2F;blog&#x2F;:id 回填当前用户是否点赞 GET &#x2F;blog&#x2F;hot 回填列表中每篇博客的 isLike GET &#x2F;blog&#x2F;of&#x2F;user 区分主页主人和当前访问者  这篇文章记录点赞功能的流程、关键代码和几">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Go 版黑马点评：博客点赞、Redis ZSet 与 isLike 回填">
 <meta property="og:url" content="http://example.com/2026/06/21/go-hmdp-blog-like-zset/index.html">
-<meta property="og:site_name" content="我的Golang学习博客">
+<meta property="og:site_name" content="XiaoLiang的学习博客">
 <meta property="og:description" content="这两天我在 Go 版黑马点评里实现了博客点赞相关功能，包括：  PUT &#x2F;blog&#x2F;like&#x2F;:id 点赞或取消点赞 GET &#x2F;blog&#x2F;likes&#x2F;:id 查询点赞用户 Top5 GET &#x2F;blog&#x2F;:id 回填当前用户是否点赞 GET &#x2F;blog&#x2F;hot 回填列表中每篇博客的 isLike GET &#x2F;blog&#x2F;of&#x2F;user 区分主页主人和当前访问者  这篇文章记录点赞功能的流程、关键代码和几">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2026-06-21T08:00:00.000Z">
@@ -22,7 +22,7 @@
 <meta property="article:tag" content="点赞">
 <meta name="twitter:card" content="summary">
   
-    <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
+    <link rel="alternate" href="/atom.xml" title="XiaoLiang的学习博客" type="application/atom+xml">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -49,7 +49,7 @@
   <div id="header-outer" class="outer">
     <div id="header-title" class="inner">
       <h1 id="logo-wrap">
-        <a href="/" id="logo">我的Golang学习博客</a>
+        <a href="/" id="logo">XiaoLiang的学习博客</a>
       </h1>
       
         <h2 id="subtitle-wrap">

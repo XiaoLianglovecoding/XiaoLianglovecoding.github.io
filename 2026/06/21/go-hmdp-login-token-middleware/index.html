@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   
   
-  <title>Go 版黑马点评：登录、Token 与双层拦截器 | 我的Golang学习博客</title>
+  <title>Go 版黑马点评：登录、Token 与双层拦截器 | XiaoLiang的学习博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <meta name="description" content="这两天我把 Go 版黑马点评的登录链路从验证码、登录、Token 保存、Token 刷新、登录拦截，到 &#x2F;user&#x2F;me 和 &#x2F;user&#x2F;logout 基本串了起来。 这篇文章主要总结登录相关的流程、代码结构和几个容易绕晕的点：  验证码为什么要放 Redis 登录后为什么返回 Token RefreshTokenMiddleware 和 LoginInterceptor 为什么要拆成两层 Gin">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Go 版黑马点评：登录、Token 与双层拦截器">
 <meta property="og:url" content="http://example.com/2026/06/21/go-hmdp-login-token-middleware/index.html">
-<meta property="og:site_name" content="我的Golang学习博客">
+<meta property="og:site_name" content="XiaoLiang的学习博客">
 <meta property="og:description" content="这两天我把 Go 版黑马点评的登录链路从验证码、登录、Token 保存、Token 刷新、登录拦截，到 &#x2F;user&#x2F;me 和 &#x2F;user&#x2F;logout 基本串了起来。 这篇文章主要总结登录相关的流程、代码结构和几个容易绕晕的点：  验证码为什么要放 Redis 登录后为什么返回 Token RefreshTokenMiddleware 和 LoginInterceptor 为什么要拆成两层 Gin">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2026-06-21T07:00:00.000Z">
@@ -22,7 +22,7 @@
 <meta property="article:tag" content="登录">
 <meta name="twitter:card" content="summary">
   
-    <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
+    <link rel="alternate" href="/atom.xml" title="XiaoLiang的学习博客" type="application/atom+xml">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -49,7 +49,7 @@
   <div id="header-outer" class="outer">
     <div id="header-title" class="inner">
       <h1 id="logo-wrap">
-        <a href="/" id="logo">我的Golang学习博客</a>
+        <a href="/" id="logo">XiaoLiang的学习博客</a>
       </h1>
       
         <h2 id="subtitle-wrap">

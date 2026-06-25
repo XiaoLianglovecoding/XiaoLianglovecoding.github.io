@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   
   
-  <title>Go 版黑马点评：发布博客与 Redis Feed 流推送详解 | 我的Golang学习博客</title>
+  <title>Go 版黑马点评：发布博客与 Redis Feed 流推送详解 | XiaoLiang的学习博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <meta name="description" content="今天我把 Go 版黑马点评里“发布博客”和“关注 Feed 流”这一块串了起来。 这部分是黑马点评 Redis 实战里很重要的一节。因为它不再只是简单地查数据库，而是开始利用 Redis 的有序集合 ZSet 做消息推送。 这篇文章重点记录：  发布博客接口的完整链路 为什么 Feed 流要用 Redis ZSet 推模式 Feed 流的核心思想 发布博客时如何把博客 ID 推送给粉丝 查询关注流">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Go 版黑马点评：发布博客与 Redis Feed 流推送详解">
 <meta property="og:url" content="http://example.com/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/index.html">
-<meta property="og:site_name" content="我的Golang学习博客">
+<meta property="og:site_name" content="XiaoLiang的学习博客">
 <meta property="og:description" content="今天我把 Go 版黑马点评里“发布博客”和“关注 Feed 流”这一块串了起来。 这部分是黑马点评 Redis 实战里很重要的一节。因为它不再只是简单地查数据库，而是开始利用 Redis 的有序集合 ZSet 做消息推送。 这篇文章重点记录：  发布博客接口的完整链路 为什么 Feed 流要用 Redis ZSet 推模式 Feed 流的核心思想 发布博客时如何把博客 ID 推送给粉丝 查询关注流">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2026-06-23T12:00:00.000Z">
@@ -22,7 +22,7 @@
 <meta property="article:tag" content="Redis">
 <meta name="twitter:card" content="summary">
   
-    <link rel="alternate" href="/atom.xml" title="我的Golang学习博客" type="application/atom+xml">
+    <link rel="alternate" href="/atom.xml" title="XiaoLiang的学习博客" type="application/atom+xml">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -49,7 +49,7 @@
   <div id="header-outer" class="outer">
     <div id="header-title" class="inner">
       <h1 id="logo-wrap">
-        <a href="/" id="logo">我的Golang学习博客</a>
+        <a href="/" id="logo">XiaoLiang的学习博客</a>
       </h1>
       
         <h2 id="subtitle-wrap">
