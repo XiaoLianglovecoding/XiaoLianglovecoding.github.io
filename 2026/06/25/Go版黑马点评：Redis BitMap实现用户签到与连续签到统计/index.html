@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Go 版黑马点评：Redis BitMap 实现用户签到与连续签到统计 | XiaoLiang的学习博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="今天继续完善 Go 版黑马点评后端，这一阶段实现的是用户签到功能。 这部分对应两个接口： 12POST &#x2F;user&#x2F;signGET  &#x2F;user&#x2F;sign&#x2F;count  功能看起来很小，但它正好能学习 Redis 里一个非常经典的数据结构：BitMap。 今天实现的目标是： 1231. 用户每天可以签到2. Redis 记录用户每天是否签到3. 查询用户本月连续签到天数">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go 版黑马点评：Redis BitMap 实现用户签到与连续签到统计">
+<meta property="og:url" content="http://example.com/2026/06/25/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20BitMap%E5%AE%9E%E7%8E%B0%E7%94%A8%E6%88%B7%E7%AD%BE%E5%88%B0%E4%B8%8E%E8%BF%9E%E7%BB%AD%E7%AD%BE%E5%88%B0%E7%BB%9F%E8%AE%A1/index.html">
+<meta property="og:site_name" content="XiaoLiang的学习博客">
+<meta property="og:description" content="今天继续完善 Go 版黑马点评后端，这一阶段实现的是用户签到功能。 这部分对应两个接口： 12POST &#x2F;user&#x2F;signGET  &#x2F;user&#x2F;sign&#x2F;count  功能看起来很小，但它正好能学习 Redis 里一个非常经典的数据结构：BitMap。 今天实现的目标是： 1231. 用户每天可以签到2. Redis 记录用户每天是否签到3. 查询用户本月连续签到天数">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-25T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-25T15:02:22.510Z">
+<meta property="article:author" content="一点甜a">
+<meta property="article:tag" content="BitMap">
+<meta property="article:tag" content="Gin">
+<meta property="article:tag" content="Redis">
+<meta property="article:tag" content="签到">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="XiaoLiang的学习博客" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">XiaoLiang的学习博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">记录用Golang+Redis实现大众点评与学习思考</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-Go版黑马点评：Redis BitMap实现用户签到与连续签到统计" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/25/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20BitMap%E5%AE%9E%E7%8E%B0%E7%94%A8%E6%88%B7%E7%AD%BE%E5%88%B0%E4%B8%8E%E8%BF%9E%E7%BB%AD%E7%AD%BE%E5%88%B0%E7%BB%9F%E8%AE%A1/" class="article-date">
+  <time class="dt-published" datetime="2026-06-25T12:00:00.000Z" itemprop="datePublished">2026-06-25</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Go 版黑马点评：Redis BitMap 实现用户签到与连续签到统计
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>今天继续完善 Go 版黑马点评后端，这一阶段实现的是用户签到功能。</p>
+<p>这部分对应两个接口：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">POST /user/sign</span><br><span class="line">GET  /user/sign/count</span><br></pre></td></tr></table></figure>
+
+<p>功能看起来很小，但它正好能学习 Redis 里一个非常经典的数据结构：<strong>BitMap</strong>。</p>
+<p>今天实现的目标是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 用户每天可以签到</span><br><span class="line">2. Redis 记录用户每天是否签到</span><br><span class="line">3. 查询用户本月连续签到天数</span><br></pre></td></tr></table></figure>
+
+<span id="more"></span>
+
+<h2 id="一、为什么签到适合用-BitMap"><a href="#一、为什么签到适合用-BitMap" class="headerlink" title="一、为什么签到适合用 BitMap"></a>一、为什么签到适合用 BitMap</h2><p>签到功能本质上只有两种状态：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">今天签到了</span><br><span class="line">今天没签到</span><br></pre></td></tr></table></figure>
+
+<p>这种状态非常适合用二进制位表示：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">1 表示已签到</span><br><span class="line">0 表示未签到</span><br></pre></td></tr></table></figure>
+
+<p>如果用 MySQL 表保存签到记录，可能需要这样一张表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">id</span><br><span class="line">user_id</span><br><span class="line">sign_date</span><br><span class="line">create_time</span><br></pre></td></tr></table></figure>
+
+<p>用户每天签到一次，就插入一条记录。</p>
+<p>这样当然可以，但如果只是为了统计某个月的签到情况，其实有点重。</p>
+<p>Redis BitMap 的思路更轻：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">一个月最多 31 天</span><br><span class="line">只需要 31 个 bit 就能记录一个用户一个月的签到情况</span><br></pre></td></tr></table></figure>
+
+<p>31 个 bit 还不到 4 个字节。</p>
+<p>这就是 BitMap 的优势：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">空间占用极小</span><br><span class="line">非常适合保存大量布尔状态</span><br></pre></td></tr></table></figure>
+
+<h2 id="二、BitMap-不是新数据类型"><a href="#二、BitMap-不是新数据类型" class="headerlink" title="二、BitMap 不是新数据类型"></a>二、BitMap 不是新数据类型</h2><p>Redis 的 BitMap 不是一种全新的数据类型。</p>
+<p>它底层还是 Redis String。</p>
+<p>只是 Redis 提供了一组按位操作命令：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">SETBIT</span><br><span class="line">GETBIT</span><br><span class="line">BITFIELD</span><br><span class="line">BITCOUNT</span><br></pre></td></tr></table></figure>
+
+<p>这次主要用到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">SETBIT   设置某一天为已签到</span><br><span class="line">BITFIELD 取出本月从 1 号到今天的所有签到位</span><br></pre></td></tr></table></figure>
+
+<h2 id="三、Redis-key-设计"><a href="#三、Redis-key-设计" class="headerlink" title="三、Redis key 设计"></a>三、Redis key 设计</h2><p>签到数据按“用户 + 月份”拆分。</p>
+<p>key 格式是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sign:&#123;userId&#125;:&#123;yyyyMM&#125;</span><br></pre></td></tr></table></figure>
+
+<p>比如用户 <code>5</code> 在 2026 年 6 月签到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sign:5:202606</span><br></pre></td></tr></table></figure>
+
+<p>这样设计有几个好处：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1. 每个月一个 key，天然按月隔离</span><br><span class="line">2. 查询本月签到时只看当前月份 key</span><br><span class="line">3. key 很短，结构清晰</span><br><span class="line">4. 以后要做历史月份统计也方便</span><br></pre></td></tr></table></figure>
+
+<p>项目里的 Redis key 前缀放在常量文件中：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> (</span><br><span class="line">    UserSignKey = <span class="string">&quot;sign:&quot;</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>最终拼出来就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sign:用户ID:年月</span><br></pre></td></tr></table></figure>
+
+<h2 id="四、日期和-BitMap-下标的对应关系"><a href="#四、日期和-BitMap-下标的对应关系" class="headerlink" title="四、日期和 BitMap 下标的对应关系"></a>四、日期和 BitMap 下标的对应关系</h2><p>日期是从 1 开始的：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">6 月 1 日</span><br><span class="line">6 月 2 日</span><br><span class="line">6 月 3 日</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>但 BitMap 的 offset 是从 0 开始的。</p>
+<p>所以对应关系是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">6月1日  -&gt; offset 0</span><br><span class="line">6月2日  -&gt; offset 1</span><br><span class="line">6月3日  -&gt; offset 2</span><br><span class="line">...</span><br><span class="line">6月25日 -&gt; offset 24</span><br></pre></td></tr></table></figure>
+
+<p>公式就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">offset = day - 1</span><br></pre></td></tr></table></figure>
+
+<p>这是签到功能里最容易写错的地方之一。</p>
+<h2 id="五、路由已经挂在登录分组下"><a href="#五、路由已经挂在登录分组下" class="headerlink" title="五、路由已经挂在登录分组下"></a>五、路由已经挂在登录分组下</h2><p>签到接口必须登录才能访问，因为后端需要知道是谁在签到。</p>
+<p>路由中这两个接口已经挂在登录保护组里：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">protectedGroup := r.Group(<span class="string">&quot;/user&quot;</span>)</span><br><span class="line">protectedGroup.Use(middleware.LoginInterceptor())</span><br><span class="line">&#123;</span><br><span class="line">    protectedGroup.GET(<span class="string">&quot;/me&quot;</span>, h.Me)</span><br><span class="line">    protectedGroup.POST(<span class="string">&quot;/logout&quot;</span>, h.Logout)</span><br><span class="line">    protectedGroup.POST(<span class="string">&quot;/sign&quot;</span>, h.Sign)</span><br><span class="line">    protectedGroup.GET(<span class="string">&quot;/sign/count&quot;</span>, h.SignCount)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，前端请求时必须带上：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">authorization: token</span><br></pre></td></tr></table></figure>
+
+<p>否则登录拦截器不会放行。</p>
+<h2 id="六、Handler-层：只负责拿当前用户"><a href="#六、Handler-层：只负责拿当前用户" class="headerlink" title="六、Handler 层：只负责拿当前用户"></a>六、Handler 层：只负责拿当前用户</h2><p>一开始我的 <code>Sign</code> 和 <code>SignCount</code> 只有 <code>context.Context</code>，但后来发现这不够。</p>
+<p>因为签到必须知道当前用户 id。</p>
+<p>所以 Handler 层要先从登录上下文里取出当前用户，再把 <code>userID</code> 传给 Service。</p>
+<h3 id="Sign-Handler"><a href="#Sign-Handler" class="headerlink" title="Sign Handler"></a>Sign Handler</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Sign 处理 POST /user/sign。</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *UserHandler)</span></span> Sign(c *gin.Context) &#123;</span><br><span class="line">    userDTO, err := userutils.GetUser(c)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        c.JSON(http.StatusUnauthorized, result.Fail(err.Error()))</span><br><span class="line">        <span class="keyword">return</span></span><br><span class="line">    &#125;</span><br><span class="line">    writeResult(c, h.userService.Sign(c.Request.Context(), userDTO.ID))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里做了三件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 从 Gin Context 中取当前登录用户</span><br><span class="line">2. 如果取不到，返回 401</span><br><span class="line">3. 调用 UserService.Sign，并传入 userDTO.ID</span><br></pre></td></tr></table></figure>
+
+<h3 id="SignCount-Handler"><a href="#SignCount-Handler" class="headerlink" title="SignCount Handler"></a>SignCount Handler</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// SignCount 处理 GET /user/sign/count。</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *UserHandler)</span></span> SignCount(c *gin.Context) &#123;</span><br><span class="line">    userDTO, err := userutils.GetUser(c)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        c.JSON(http.StatusUnauthorized, result.Fail(err.Error()))</span><br><span class="line">        <span class="keyword">return</span></span><br><span class="line">    &#125;</span><br><span class="line">    writeResult(c, h.userService.SignCount(c.Request.Context(), userDTO.ID))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里和签到接口类似。</p>
+<p>Handler 层不碰 Redis，也不处理 BitMap。</p>
+<p>它只负责：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">拿当前用户</span><br><span class="line">调用 Service</span><br><span class="line">返回结果</span><br></pre></td></tr></table></figure>
+
+<h2 id="七、Service-接口调整"><a href="#七、Service-接口调整" class="headerlink" title="七、Service 接口调整"></a>七、Service 接口调整</h2><p>因为 Service 需要知道当前用户 id，所以接口改成：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> UserService <span class="keyword">interface</span> &#123;</span><br><span class="line">    <span class="comment">// Sign 今日签到。</span></span><br><span class="line">    Sign(ctx context.Context, userID <span class="type">int64</span>) result.Result</span><br><span class="line"></span><br><span class="line">    <span class="comment">// SignCount 查询连续签到天数。</span></span><br><span class="line">    SignCount(ctx context.Context, userID <span class="type">int64</span>) result.Result</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这样分层更清楚：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Handler 负责从请求里拿用户</span><br><span class="line">Service 负责业务逻辑</span><br></pre></td></tr></table></figure>
+
+<p>不要在 Service 里直接依赖 Gin 的 <code>*gin.Context</code>。</p>
+<p>这样 Service 层会更干净，也更容易测试。</p>
+<h2 id="八、签到接口：SETBIT"><a href="#八、签到接口：SETBIT" class="headerlink" title="八、签到接口：SETBIT"></a>八、签到接口：SETBIT</h2><p>签到的核心命令是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SETBIT key offset 1</span><br></pre></td></tr></table></figure>
+
+<p>比如用户 5 在 2026 年 6 月 25 日签到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SETBIT sign:5:202606 24 1</span><br></pre></td></tr></table></figure>
+
+<p>Go 代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Sign 今日签到。</span></span><br><span class="line"><span class="comment">//</span></span><br><span class="line"><span class="comment">// Redis 里每个月一个 key：</span></span><br><span class="line"><span class="comment">//</span></span><br><span class="line"><span class="comment">//	sign:&#123;userId&#125;:yyyyMM</span></span><br><span class="line"><span class="comment">//</span></span><br><span class="line"><span class="comment">// 例如 2026 年 6 月 25 日签到：</span></span><br><span class="line"><span class="comment">//</span></span><br><span class="line"><span class="comment">//	SETBIT sign:5:202606 24 1</span></span><br><span class="line"><span class="comment">//</span></span><br><span class="line"><span class="comment">// 这里 day-1 是因为 Redis 的位下标从 0 开始，而日期从 1 开始。</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *userService)</span></span> Sign(ctx context.Context, userID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> userID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;user not login&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    now := time.Now()</span><br><span class="line">    key := fmt.Sprintf(<span class="string">&quot;%s%d:%s&quot;</span>, constants.UserSignKey, userID, now.Format(<span class="string">&quot;200601&quot;</span>))</span><br><span class="line">    offset := now.Day() - <span class="number">1</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err := s.redisClient.SetBit(ctx, key, <span class="type">int64</span>(offset), <span class="number">1</span>).Err(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[UserService.Sign] setbit failed, key=%s, err=%v&quot;</span>, key, err)</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;sign failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OK()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段代码拆开看很简单。</p>
+<p>第一步，校验用户 id：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> userID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> result.Fail(<span class="string">&quot;user not login&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>第二步，生成当前月份 key：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">now := time.Now()</span><br><span class="line">key := fmt.Sprintf(<span class="string">&quot;%s%d:%s&quot;</span>, constants.UserSignKey, userID, now.Format(<span class="string">&quot;200601&quot;</span>))</span><br></pre></td></tr></table></figure>
+
+<p><code>now.Format(&quot;200601&quot;)</code> 是 Go 里格式化年月的写法。</p>
+<p>例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">2026-06-25 -&gt; 202606</span><br></pre></td></tr></table></figure>
+
+<p>第三步，计算 offset：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">offset := now.Day() - <span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<p>第四步，设置 BitMap：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">s.redisClient.SetBit(ctx, key, <span class="type">int64</span>(offset), <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这就完成了今日签到。</p>
+<h2 id="九、为什么重复签到不会出问题"><a href="#九、为什么重复签到不会出问题" class="headerlink" title="九、为什么重复签到不会出问题"></a>九、为什么重复签到不会出问题</h2><p>如果用户今天已经签到过了，再次执行：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SETBIT sign:5:202606 24 1</span><br></pre></td></tr></table></figure>
+
+<p>还是把同一个位置设置为 <code>1</code>。</p>
+<p>这不会重复增加记录。</p>
+<p>所以这个签到接口天然具有幂等性。</p>
+<p>多点几次签到，Redis 里还是同一个 bit 为 1。</p>
+<h2 id="十、连续签到统计的目标"><a href="#十、连续签到统计的目标" class="headerlink" title="十、连续签到统计的目标"></a>十、连续签到统计的目标</h2><p><code>GET /user/sign/count</code> 不是统计本月总签到天数。</p>
+<p>它统计的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">从今天开始往前数，连续签到了几天</span><br></pre></td></tr></table></figure>
+
+<p>举个例子：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">6月25日 已签到</span><br><span class="line">6月24日 已签到</span><br><span class="line">6月23日 已签到</span><br><span class="line">6月22日 未签到</span><br><span class="line">6月21日 已签到</span><br></pre></td></tr></table></figure>
+
+<p>连续签到天数是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">3</span><br></pre></td></tr></table></figure>
+
+<p>因为从 25 日往前数，到 22 日断了。</p>
+<p>21 日即使签过，也不算进连续签到。</p>
+<h2 id="十一、为什么不用-BITCOUNT"><a href="#十一、为什么不用-BITCOUNT" class="headerlink" title="十一、为什么不用 BITCOUNT"></a>十一、为什么不用 BITCOUNT</h2><p>Redis 有一个命令：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">BITCOUNT</span><br></pre></td></tr></table></figure>
+
+<p>它可以统计 BitMap 中有多少个 <code>1</code>。</p>
+<p>但它统计的是总数。</p>
+<p>如果本月签到情况是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">1 1 0 1 1</span><br></pre></td></tr></table></figure>
+
+<p><code>BITCOUNT</code> 得到的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">4</span><br></pre></td></tr></table></figure>
+
+<p>但如果今天是最后一天，连续签到天数应该是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">2</span><br></pre></td></tr></table></figure>
+
+<p>所以连续签到不能直接用 <code>BITCOUNT</code>。</p>
+<p>这里要用：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">BITFIELD</span><br></pre></td></tr></table></figure>
+
+<p>取出本月从 1 号到今天的所有 bit，然后自己从今天往前数连续的 <code>1</code>。</p>
+<h2 id="十二、BITFIELD-取出本月签到位"><a href="#十二、BITFIELD-取出本月签到位" class="headerlink" title="十二、BITFIELD 取出本月签到位"></a>十二、BITFIELD 取出本月签到位</h2><p>假设今天是 6 月 25 日。</p>
+<p>我们需要取出前 25 位：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">BITFIELD sign:5:202606 GET u25 0</span><br></pre></td></tr></table></figure>
+
+<p>含义是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">从 offset 0 开始</span><br><span class="line">读取 25 个 bit</span><br><span class="line">按无符号整数返回</span><br></pre></td></tr></table></figure>
+
+<p>Go 代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">res, err := s.redisClient.BitField(ctx, key, <span class="string">&quot;get&quot;</span>, fmt.Sprintf(<span class="string">&quot;u%d&quot;</span>, day), <span class="number">0</span>).Result()</span><br></pre></td></tr></table></figure>
+
+<p>这里：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fmt.Sprintf(<span class="string">&quot;u%d&quot;</span>, day)</span><br></pre></td></tr></table></figure>
+
+<p>如果今天是 25 号，就得到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">u25</span><br></pre></td></tr></table></figure>
+
+<p>因为一个月最多 31 天，所以 <code>u{day}</code> 足够表示本月到今天的签到位。</p>
+<h2 id="十三、SignCount-完整代码"><a href="#十三、SignCount-完整代码" class="headerlink" title="十三、SignCount 完整代码"></a>十三、SignCount 完整代码</h2><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// SignCount 查询连续签到天数。</span></span><br><span class="line"><span class="comment">//</span></span><br><span class="line"><span class="comment">// 统计逻辑：</span></span><br><span class="line"><span class="comment">// 1. 先用 BITFIELD 取出本月从 1 号到今天的所有签到位；</span></span><br><span class="line"><span class="comment">// 2. 再从最低位开始，连续判断 1 的个数；</span></span><br><span class="line"><span class="comment">// 3. 遇到 0 就停止。</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *userService)</span></span> SignCount(ctx context.Context, userID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> userID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;user not login&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    now := time.Now()</span><br><span class="line">    key := fmt.Sprintf(<span class="string">&quot;%s%d:%s&quot;</span>, constants.UserSignKey, userID, now.Format(<span class="string">&quot;200601&quot;</span>))</span><br><span class="line">    day := now.Day()</span><br><span class="line"></span><br><span class="line">    <span class="comment">// BITFIELD key GET u&#123;day&#125; 0</span></span><br><span class="line">    <span class="comment">// day 最大也就是 31，所以这里用无符号整数就够了。</span></span><br><span class="line">    res, err := s.redisClient.BitField(ctx, key, <span class="string">&quot;get&quot;</span>, fmt.Sprintf(<span class="string">&quot;u%d&quot;</span>, day), <span class="number">0</span>).Result()</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[UserService.SignCount] bitfield failed, key=%s, err=%v&quot;</span>, key, err)</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;query sign count failed&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">len</span>(res) == <span class="number">0</span> || res[<span class="number">0</span>] == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.OKWithData(<span class="number">0</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    num := res[<span class="number">0</span>]</span><br><span class="line">    count := <span class="number">0</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 从最低位开始依次判断：</span></span><br><span class="line">    <span class="comment">// 如果最低位是 1，说明今天/前一天签到了；</span></span><br><span class="line">    <span class="comment">// 如果最低位是 0，说明连续签到在这里断掉了。</span></span><br><span class="line">    <span class="keyword">for</span> i := <span class="number">0</span>; i &lt; day; i++ &#123;</span><br><span class="line">        <span class="keyword">if</span> num&amp;<span class="number">1</span> == <span class="number">0</span> &#123;</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">        &#125;</span><br><span class="line">        count++</span><br><span class="line">        num &gt;&gt;= <span class="number">1</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(count)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个方法是今天的重点。</p>
+<h2 id="十四、为什么从最低位开始判断"><a href="#十四、为什么从最低位开始判断" class="headerlink" title="十四、为什么从最低位开始判断"></a>十四、为什么从最低位开始判断</h2><p><code>BITFIELD</code> 取出的是从 1 号到今天的签到位。</p>
+<p>我们要统计的是“从今天往前”的连续签到。</p>
+<p>所以要从取出来的数字最低位开始判断。</p>
+<p>核心代码是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> num&amp;<span class="number">1</span> == <span class="number">0</span> &#123;</span><br><span class="line">    <span class="keyword">break</span></span><br><span class="line">&#125;</span><br><span class="line">count++</span><br><span class="line">num &gt;&gt;= <span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<p><code>num &amp; 1</code> 的意思是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">判断当前数字的最低位是不是 1</span><br></pre></td></tr></table></figure>
+
+<p>如果最低位是 1：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">说明这一天签到了</span><br><span class="line">count++</span><br></pre></td></tr></table></figure>
+
+<p>然后右移一位：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">num &gt;&gt;= <span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<p>继续判断前一天。</p>
+<p>如果遇到 0：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">说明连续签到断了</span><br><span class="line">直接 break</span><br></pre></td></tr></table></figure>
+
+<h2 id="十五、用一个例子理解右移统计"><a href="#十五、用一个例子理解右移统计" class="headerlink" title="十五、用一个例子理解右移统计"></a>十五、用一个例子理解右移统计</h2><p>假设今天是 6 月 5 日，签到情况是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">6月1日 签到</span><br><span class="line">6月2日 未签到</span><br><span class="line">6月3日 签到</span><br><span class="line">6月4日 签到</span><br><span class="line">6月5日 签到</span><br></pre></td></tr></table></figure>
+
+<p>可以理解为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">1 0 1 1 1</span><br></pre></td></tr></table></figure>
+
+<p>从今天往前看：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">6月5日 1</span><br><span class="line">6月4日 1</span><br><span class="line">6月3日 1</span><br><span class="line">6月2日 0</span><br></pre></td></tr></table></figure>
+
+<p>所以连续签到天数是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">3</span><br></pre></td></tr></table></figure>
+
+<p>循环时大概是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">最低位是 1 -&gt; count = 1</span><br><span class="line">右移</span><br><span class="line">最低位是 1 -&gt; count = 2</span><br><span class="line">右移</span><br><span class="line">最低位是 1 -&gt; count = 3</span><br><span class="line">右移</span><br><span class="line">最低位是 0 -&gt; 停止</span><br></pre></td></tr></table></figure>
+
+<p>这就是连续签到统计的核心思想。</p>
+<h2 id="十六、测试方式"><a href="#十六、测试方式" class="headerlink" title="十六、测试方式"></a>十六、测试方式</h2><p>先启动后端：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">go run ./cmd/server</span><br></pre></td></tr></table></figure>
+
+<p>登录后拿到 token。</p>
+<p>请求签到：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">curl -X POST http://127.0.0.1:8081/user/sign ^</span><br><span class="line">  -H <span class="string">&quot;authorization: 你的token&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>预期返回：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>查询连续签到：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">curl http://127.0.0.1:8081/user/sign/count ^</span><br><span class="line">  -H <span class="string">&quot;authorization: 你的token&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>预期返回：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;success&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;errorMsg&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="number">1</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="十七、Redis-中怎么查看"><a href="#十七、Redis-中怎么查看" class="headerlink" title="十七、Redis 中怎么查看"></a>十七、Redis 中怎么查看</h2><p>如果用户 id 是 <code>5</code>，当前月份是 2026 年 6 月，key 是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sign:5:202606</span><br></pre></td></tr></table></figure>
+
+<p>查看今天是否签到：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GETBIT sign:5:202606 24</span><br></pre></td></tr></table></figure>
+
+<p>如果今天是 25 号，offset 就是 24。</p>
+<p>返回：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">1</span><br></pre></td></tr></table></figure>
+
+<p>说明今天已签到。</p>
+<p>也可以手动设置几天数据测试：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">SETBIT sign:5:202606 22 1</span><br><span class="line">SETBIT sign:5:202606 23 1</span><br><span class="line">SETBIT sign:5:202606 24 1</span><br></pre></td></tr></table></figure>
+
+<p>然后再请求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /user/sign/count</span><br></pre></td></tr></table></figure>
+
+<p>看是否返回连续签到天数。</p>
+<h2 id="十八、容易踩坑的地方"><a href="#十八、容易踩坑的地方" class="headerlink" title="十八、容易踩坑的地方"></a>十八、容易踩坑的地方</h2><h3 id="1-offset-要用-day-1"><a href="#1-offset-要用-day-1" class="headerlink" title="1. offset 要用 day - 1"></a>1. offset 要用 day - 1</h3><p>日期从 1 开始，BitMap 下标从 0 开始。</p>
+<p>所以不是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">offset := now.Day()</span><br></pre></td></tr></table></figure>
+
+<p>而是：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">offset := now.Day() - <span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="2-key-要按月拆分"><a href="#2-key-要按月拆分" class="headerlink" title="2. key 要按月拆分"></a>2. key 要按月拆分</h3><p>不要写成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sign:&#123;userId&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这样所有月份都会混在一起。</p>
+<p>更好的写法是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sign:&#123;userId&#125;:&#123;yyyyMM&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="3-连续签到不是总签到"><a href="#3-连续签到不是总签到" class="headerlink" title="3. 连续签到不是总签到"></a>3. 连续签到不是总签到</h3><p>总签到可以用 <code>BITCOUNT</code>。</p>
+<p>连续签到要用 <code>BITFIELD + 位运算</code>。</p>
+<h3 id="4-Handler-要传-userID"><a href="#4-Handler-要传-userID" class="headerlink" title="4. Handler 要传 userID"></a>4. Handler 要传 userID</h3><p>Service 不能凭空知道当前用户是谁。</p>
+<p>所以 Handler 要先：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">userutils.GetUser(c)</span><br></pre></td></tr></table></figure>
+
+<p>再传：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">userDTO.ID</span><br></pre></td></tr></table></figure>
+
+<h3 id="5-接口必须放在登录保护组"><a href="#5-接口必须放在登录保护组" class="headerlink" title="5. 接口必须放在登录保护组"></a>5. 接口必须放在登录保护组</h3><p>签到和查询签到天数都必须登录。</p>
+<p>否则后端不知道该操作哪个用户的 BitMap。</p>
+<h2 id="十九、这一阶段学到了什么"><a href="#十九、这一阶段学到了什么" class="headerlink" title="十九、这一阶段学到了什么"></a>十九、这一阶段学到了什么</h2><p>今天这个功能虽然不大，但学到的东西很实用。</p>
+<p>主要包括：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">1. Redis BitMap 的使用场景</span><br><span class="line">2. SETBIT 如何保存每日签到状态</span><br><span class="line">3. BITFIELD 如何读取一段 bit</span><br><span class="line">4. 位运算如何统计连续签到</span><br><span class="line">5. Handler 和 Service 之间如何传递当前用户 ID</span><br><span class="line">6. 为什么签到接口天然幂等</span><br></pre></td></tr></table></figure>
+
+<p>BitMap 很适合这种“是否做过某件事”的场景。</p>
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">用户签到</span><br><span class="line">用户活跃天数</span><br><span class="line">每日打卡</span><br><span class="line">消息是否已读</span><br><span class="line">活动参与状态</span><br></pre></td></tr></table></figure>
+
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>今天实现了 Go 版黑马点评的签到功能。</p>
+<p>最终链路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">POST /user/sign</span><br><span class="line">-&gt; LoginInterceptor 校验 token</span><br><span class="line">-&gt; Handler 获取当前用户 ID</span><br><span class="line">-&gt; Service 拼接 sign:&#123;userId&#125;:&#123;yyyyMM&#125;</span><br><span class="line">-&gt; SETBIT 设置今天为已签到</span><br></pre></td></tr></table></figure>
+
+<p>查询连续签到链路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">GET /user/sign/count</span><br><span class="line">-&gt; LoginInterceptor 校验 token</span><br><span class="line">-&gt; Handler 获取当前用户 ID</span><br><span class="line">-&gt; Service BITFIELD 取出本月签到位</span><br><span class="line">-&gt; 从最低位开始统计连续的 1</span><br><span class="line">-&gt; 返回连续签到天数</span><br></pre></td></tr></table></figure>
+
+<p>这一节补上了 Redis BitMap 的实战使用。</p>
+<p>到这里，项目里 Redis 已经用到了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">String  验证码、简单缓存</span><br><span class="line">Hash    登录用户 token</span><br><span class="line">Set     关注关系、共同关注</span><br><span class="line">ZSet    点赞、Feed 流</span><br><span class="line">BitMap  用户签到</span><br></pre></td></tr></table></figure>
+
+<p>Redis 的常用数据结构，已经在这个项目里真正串起来了。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/25/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20BitMap%E5%AE%9E%E7%8E%B0%E7%94%A8%E6%88%B7%E7%AD%BE%E5%88%B0%E4%B8%8E%E8%BF%9E%E7%BB%AD%E7%AD%BE%E5%88%B0%E7%BB%9F%E8%AE%A1/" data-id="cuidCwKs9LGFsmcHLAqS4EKXt" data-title="Go 版黑马点评：Redis BitMap 实现用户签到与连续签到统计" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/BitMap/" rel="tag">BitMap</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%AD%BE%E5%88%B0/" rel="tag">签到</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/06/24/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%BA%97%E9%93%BA%E8%AF%A6%E6%83%85Redis%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96%E8%AF%A6%E8%A7%A3/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">Go 版黑马点评：店铺详情 Redis 缓存优化详解</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/BitMap/" rel="tag">BitMap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feed%E6%B5%81/" rel="tag">Feed流</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nginx/" rel="tag">Nginx</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OSS/" rel="tag">OSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Set/" rel="tag">Set</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%85%B3%E6%B3%A8/" rel="tag">关注</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" rel="tag">文件上传</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%AD%BE%E5%88%B0/" rel="tag">签到</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BC%93%E5%AD%98/" rel="tag">缓存</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" rel="tag">项目架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" rel="tag">首页接口</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/BitMap/" style="font-size: 10px;">BitMap</a> <a href="/tags/Feed%E6%B5%81/" style="font-size: 10px;">Feed流</a> <a href="/tags/GORM/" style="font-size: 13.33px;">GORM</a> <a href="/tags/Gin/" style="font-size: 20px;">Gin</a> <a href="/tags/MySQL/" style="font-size: 10px;">MySQL</a> <a href="/tags/Nginx/" style="font-size: 10px;">Nginx</a> <a href="/tags/OSS/" style="font-size: 10px;">OSS</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Set/" style="font-size: 10px;">Set</a> <a href="/tags/Viper/" style="font-size: 10px;">Viper</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E5%85%B3%E6%B3%A8/" style="font-size: 10px;">关注</a> <a href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" style="font-size: 10px;">文件上传</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a> <a href="/tags/%E7%AD%BE%E5%88%B0/" style="font-size: 10px;">签到</a> <a href="/tags/%E7%BC%93%E5%AD%98/" style="font-size: 10px;">缓存</a> <a href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">项目架构</a> <a href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" style="font-size: 10px;">首页接口</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/06/25/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20BitMap%E5%AE%9E%E7%8E%B0%E7%94%A8%E6%88%B7%E7%AD%BE%E5%88%B0%E4%B8%8E%E8%BF%9E%E7%BB%AD%E7%AD%BE%E5%88%B0%E7%BB%9F%E8%AE%A1/">Go 版黑马点评：Redis BitMap 实现用户签到与连续签到统计</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/24/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%BA%97%E9%93%BA%E8%AF%A6%E6%83%85Redis%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96%E8%AF%A6%E8%A7%A3/">Go 版黑马点评：店铺详情 Redis 缓存优化详解</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/">Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/">Go 版黑马点评：发布博客与 Redis Feed 流推送详解</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/22/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%85%B3%E6%B3%A8%E3%80%81%E5%8F%96%E5%85%B3%E3%80%81%E5%85%B1%E5%90%8C%E5%85%B3%E6%B3%A8%E4%B8%8ERedisSet%E4%BC%98%E5%8C%96/">Go 版黑马点评：关注、取关、共同关注与 Redis Set 优化</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 一点甜a<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
