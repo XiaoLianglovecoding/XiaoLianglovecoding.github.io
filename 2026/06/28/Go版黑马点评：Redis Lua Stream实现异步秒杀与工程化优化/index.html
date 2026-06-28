@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Go 版黑马点评：Redis Lua Stream 实现异步秒杀与工程化优化 | XiaoLiang的学习博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="这几天一直在推进黑马点评里最核心、也是最容易出问题的一块：优惠券秒杀。 一开始我写的是数据库同步版秒杀。流程很直接：请求进来后查秒杀券，判断时间，判断库存，判断一人一单，然后扣 MySQL 库存，最后创建订单。 这个版本适合学习业务流程，但它的问题也很明显：每一个请求都要打到 MySQL。在秒杀这种瞬时高并发场景下，数据库会同时承担库存判断、一人一单判断、扣库存、写订单，压力太集中。 所以今天这一">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go 版黑马点评：Redis Lua Stream 实现异步秒杀与工程化优化">
+<meta property="og:url" content="http://example.com/2026/06/28/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20Lua%20Stream%E5%AE%9E%E7%8E%B0%E5%BC%82%E6%AD%A5%E7%A7%92%E6%9D%80%E4%B8%8E%E5%B7%A5%E7%A8%8B%E5%8C%96%E4%BC%98%E5%8C%96/index.html">
+<meta property="og:site_name" content="XiaoLiang的学习博客">
+<meta property="og:description" content="这几天一直在推进黑马点评里最核心、也是最容易出问题的一块：优惠券秒杀。 一开始我写的是数据库同步版秒杀。流程很直接：请求进来后查秒杀券，判断时间，判断库存，判断一人一单，然后扣 MySQL 库存，最后创建订单。 这个版本适合学习业务流程，但它的问题也很明显：每一个请求都要打到 MySQL。在秒杀这种瞬时高并发场景下，数据库会同时承担库存判断、一人一单判断、扣库存、写订单，压力太集中。 所以今天这一">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-28T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-28T15:42:02.048Z">
+<meta property="article:author" content="一点甜a">
+<meta property="article:tag" content="Go">
+<meta property="article:tag" content="Lua">
+<meta property="article:tag" content="Redis">
+<meta property="article:tag" content="Stream">
+<meta property="article:tag" content="秒杀">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="XiaoLiang的学习博客" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">XiaoLiang的学习博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">记录用Golang+Redis实现大众点评与学习思考</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-Go版黑马点评：Redis Lua Stream实现异步秒杀与工程化优化" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/28/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20Lua%20Stream%E5%AE%9E%E7%8E%B0%E5%BC%82%E6%AD%A5%E7%A7%92%E6%9D%80%E4%B8%8E%E5%B7%A5%E7%A8%8B%E5%8C%96%E4%BC%98%E5%8C%96/" class="article-date">
+  <time class="dt-published" datetime="2026-06-28T12:00:00.000Z" itemprop="datePublished">2026-06-28</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Go/">Go</a>►<a class="article-category-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Go 版黑马点评：Redis Lua Stream 实现异步秒杀与工程化优化
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>这几天一直在推进黑马点评里最核心、也是最容易出问题的一块：优惠券秒杀。</p>
+<p>一开始我写的是数据库同步版秒杀。流程很直接：请求进来后查秒杀券，判断时间，判断库存，判断一人一单，然后扣 MySQL 库存，最后创建订单。</p>
+<p>这个版本适合学习业务流程，但它的问题也很明显：每一个请求都要打到 MySQL。在秒杀这种瞬时高并发场景下，数据库会同时承担库存判断、一人一单判断、扣库存、写订单，压力太集中。</p>
+<p>所以今天这一步的目标，就是把同步秒杀改造成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Redis Lua 前置判断</span><br><span class="line">Redis Stream 异步排队</span><br><span class="line">后台 goroutine 落库</span><br><span class="line">优雅停机</span><br><span class="line">失败重试与死信队列</span><br></pre></td></tr></table></figure>
+
+<p>整个过程不是为了堆技术名词，而是围绕一个问题逐步拆解：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">秒杀请求太多时，如何尽量少让 MySQL 扛第一波压力？</span><br></pre></td></tr></table></figure>
+
+<span id="more"></span>
+
+<h2 id="从数据库同步版到-Redis-异步版"><a href="#从数据库同步版到-Redis-异步版" class="headerlink" title="从数据库同步版到 Redis 异步版"></a>从数据库同步版到 Redis 异步版</h2><p>数据库同步版秒杀大概是这样的：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">用户请求</span><br><span class="line">-&gt; 查 tb_seckill_voucher</span><br><span class="line">-&gt; 判断库存</span><br><span class="line">-&gt; 查 tb_voucher_order 判断一人一单</span><br><span class="line">-&gt; UPDATE stock = stock - 1</span><br><span class="line">-&gt; INSERT 订单</span><br><span class="line">-&gt; 返回订单 ID</span><br></pre></td></tr></table></figure>
+
+<p>这个流程虽然清晰，但每一步都要访问 MySQL。尤其是一人一单和扣库存，在高并发下会成为热点。</p>
+<p>优化思路是把“能在 Redis 里快速判断的事情”前置：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">库存够不够？</span><br><span class="line">这个用户有没有抢过？</span><br></pre></td></tr></table></figure>
+
+<p>这两个判断都可以放进 Redis：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">seckill:stock:&#123;voucherId&#125;   保存库存</span><br><span class="line">seckill:orders:&#123;voucherId&#125;  保存抢过这张券的用户 ID</span><br></pre></td></tr></table></figure>
+
+<p>但是仅仅用 Redis 还不够，因为判断库存、判断一人一单、扣库存、记录用户，这几步必须是一个整体。否则并发请求插进来，还是可能出问题。</p>
+<p>所以这里使用 Lua 脚本。</p>
+<p>Lua 脚本在 Redis 中执行时是原子的，适合做这种“多个 Redis 操作必须一起完成”的逻辑。</p>
+<p>最终请求链路变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">用户请求</span><br><span class="line">-&gt; 生成订单 ID</span><br><span class="line">-&gt; 执行 Lua</span><br><span class="line">   -&gt; 判断库存</span><br><span class="line">   -&gt; 判断一人一单</span><br><span class="line">   -&gt; 扣 Redis 库存</span><br><span class="line">   -&gt; 记录用户已下单</span><br><span class="line">   -&gt; 写入 Redis Stream</span><br><span class="line">-&gt; 立即返回订单 ID</span><br></pre></td></tr></table></figure>
+
+<p>然后后台协程慢慢消费 Stream：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">goroutine</span><br><span class="line">-&gt; 读取 stream.orders</span><br><span class="line">-&gt; MySQL 事务扣库存</span><br><span class="line">-&gt; MySQL 创建订单</span><br><span class="line">-&gt; ACK 消息</span><br></pre></td></tr></table></figure>
+
+<p>这样用户请求线程不再直接写 MySQL，MySQL 压力被削峰。</p>
+<h2 id="秒杀券新增时的库存预热"><a href="#秒杀券新增时的库存预热" class="headerlink" title="秒杀券新增时的库存预热"></a>秒杀券新增时的库存预热</h2><p>Lua 判断库存之前，Redis 里必须先有库存。</p>
+<p>因此新增秒杀券时，要先保存数据库，再把库存写入 Redis。</p>
+<p>这里有一个容易踩坑的点：不能在保存数据库之前就用 <code>voucher.ID</code> 拼 Redis key。</p>
+<p>因为新增优惠券时，<code>voucher.ID</code> 一开始通常是 0。必须先保存 <code>tb_voucher</code>，让数据库生成 ID，再保存 <code>tb_seckill_voucher</code>，最后才能预热 Redis。</p>
+<p>我这里把普通券和秒杀券的保存放进了一个事务：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *voucherRepository)</span></span> SaveSeckillVoucherTx(ctx context.Context, voucher *model.Voucher, seckillVoucher *model.SeckillVoucher) <span class="type">error</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> r.db.WithContext(ctx).Transaction(<span class="function"><span class="keyword">func</span><span class="params">(tx *gorm.DB)</span></span> <span class="type">error</span> &#123;</span><br><span class="line">        <span class="comment">// 1. 插入 tb_voucher，插入后 GORM 会将自增 ID 赋值给 voucher.ID</span></span><br><span class="line">        <span class="keyword">if</span> err := tx.Create(voucher).Error; err != <span class="literal">nil</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> err</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 2. 将刚生成的 voucher.ID 赋给 seckillVoucher</span></span><br><span class="line">        seckillVoucher.VoucherID = voucher.ID</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 3. 插入 tb_seckill_voucher</span></span><br><span class="line">        <span class="keyword">if</span> err := tx.Create(seckillVoucher).Error; err != <span class="literal">nil</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> err</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">    &#125;)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Service 层保存秒杀券并预热 Redis：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherService)</span></span> AddSeckillVoucher(ctx context.Context, voucher model.Voucher) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> voucher.ShopID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid shop id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> voucher.Stock &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;stock must be greater than 0&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> voucher.BeginTime == <span class="literal">nil</span> || voucher.EndTime == <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;beginTime and endTime can not be empty&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> !voucher.EndTime.After(*voucher.BeginTime) &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;endTime must be after beginTime&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    voucher.Type = <span class="number">1</span></span><br><span class="line"></span><br><span class="line">    seckillVoucher := &amp;model.SeckillVoucher&#123;</span><br><span class="line">        Stock:     voucher.Stock,</span><br><span class="line">        BeginTime: *voucher.BeginTime,</span><br><span class="line">        EndTime:   *voucher.EndTime,</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err := s.voucherRepo.SaveSeckillVoucherTx(ctx, &amp;voucher, seckillVoucher); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[AddSeckillVoucher] DB transaction failed: %v&quot;</span>, err)</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;数据库保存失败，请重试&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    stockKey := constants.SeckillStockKey + strconv.FormatInt(voucher.ID, <span class="number">10</span>)</span><br><span class="line">    orderKey := constants.SeckillOrdersKey + strconv.FormatInt(voucher.ID, <span class="number">10</span>)</span><br><span class="line"></span><br><span class="line">    ttl := time.Until(*voucher.EndTime)</span><br><span class="line">    <span class="keyword">if</span> ttl &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;seckill voucher has expired&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    pipe := s.redisClient.TxPipeline()</span><br><span class="line">    pipe.Set(ctx, stockKey, voucher.Stock, ttl)</span><br><span class="line">    pipe.Del(ctx, orderKey)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> _, err := pipe.Exec(ctx); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[AddSeckillVoucher] redis preheat failed for voucherID=%d: %v&quot;</span>, voucher.ID, err)</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;保存成功，但Redis库存预热失败，需要重试预热&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> result.OKWithData(voucher.ID)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里我给 Redis 库存 key 设置了过期时间：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ttl = 秒杀结束时间 - 当前时间</span><br></pre></td></tr></table></figure>
+
+<p>这样秒杀结束后，Redis 中的库存 key 会自动清理，避免历史秒杀券数据一直堆着。</p>
+<h2 id="Lua-脚本：把并发判断压到-Redis"><a href="#Lua-脚本：把并发判断压到-Redis" class="headerlink" title="Lua 脚本：把并发判断压到 Redis"></a>Lua 脚本：把并发判断压到 Redis</h2><p>Lua 脚本负责四件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1. 判断库存</span><br><span class="line">2. 判断用户是否已经抢过</span><br><span class="line">3. 扣 Redis 库存</span><br><span class="line">4. 写入 Redis Stream</span><br></pre></td></tr></table></figure>
+
+<p>代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> SeckillScript = <span class="string">`</span></span><br><span class="line"><span class="string">local voucherId = ARGV[1]</span></span><br><span class="line"><span class="string">local userId = ARGV[2]</span></span><br><span class="line"><span class="string">local orderId = ARGV[3]</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">local stockKey = &#x27;seckill:stock:&#x27; .. voucherId</span></span><br><span class="line"><span class="string">local orderKey = &#x27;seckill:orders:&#x27; .. voucherId</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">if (tonumber(redis.call(&#x27;get&#x27;, stockKey)) or 0) &lt;= 0 then</span></span><br><span class="line"><span class="string">    return 1</span></span><br><span class="line"><span class="string">end</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">if (redis.call(&#x27;sismember&#x27;, orderKey, userId) == 1) then</span></span><br><span class="line"><span class="string">    return 2</span></span><br><span class="line"><span class="string">end</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">redis.call(&#x27;decr&#x27;, stockKey)</span></span><br><span class="line"><span class="string">redis.call(&#x27;sadd&#x27;, orderKey, userId)</span></span><br><span class="line"><span class="string">redis.call(&#x27;xadd&#x27;, &#x27;stream.orders&#x27;, &#x27;*&#x27;, &#x27;userId&#x27;, userId, &#x27;voucherId&#x27;, voucherId, &#x27;id&#x27;, orderId)</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">return 0</span></span><br><span class="line"><span class="string">`</span></span><br></pre></td></tr></table></figure>
+
+<p>返回值约定：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">0 成功</span><br><span class="line">1 库存不足</span><br><span class="line">2 重复下单</span><br></pre></td></tr></table></figure>
+
+<p>Go 里使用 <code>redis.NewScript</code> 包装：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> seckillScript = redis.NewScript(constants.SeckillScript)</span><br></pre></td></tr></table></figure>
+
+<p>秒杀入口变得很轻：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> SeckillVoucher(ctx context.Context, voucherID <span class="type">int64</span>, userID <span class="type">int64</span>) result.Result &#123;</span><br><span class="line">    <span class="keyword">if</span> voucherID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;invalid voucher id&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> userID &lt;= <span class="number">0</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;用户未登录&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    orderID := utils.GlobalSnowflake.NextVal()</span><br><span class="line"></span><br><span class="line">    code, err := seckillScript.Run(</span><br><span class="line">        ctx,</span><br><span class="line">        s.redisClient,</span><br><span class="line">        []<span class="type">string</span>&#123;&#125;,</span><br><span class="line">        strconv.FormatInt(voucherID, <span class="number">10</span>),</span><br><span class="line">        strconv.FormatInt(userID, <span class="number">10</span>),</span><br><span class="line">        strconv.FormatInt(orderID, <span class="number">10</span>),</span><br><span class="line">    ).Int()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[seckill] lua execute failed, voucherID=%d userID=%d err=%v&quot;</span>, voucherID, userID, err)</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;秒杀失败，请稍后重试&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">switch</span> code &#123;</span><br><span class="line">    <span class="keyword">case</span> <span class="number">0</span>:</span><br><span class="line">        <span class="keyword">return</span> result.OKWithData(orderID)</span><br><span class="line">    <span class="keyword">case</span> <span class="number">1</span>:</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;库存不足&quot;</span>)</span><br><span class="line">    <span class="keyword">case</span> <span class="number">2</span>:</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;不能重复下单&quot;</span>)</span><br><span class="line">    <span class="keyword">default</span>:</span><br><span class="line">        <span class="keyword">return</span> result.Fail(<span class="string">&quot;秒杀失败&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里请求成功并不代表 MySQL 已经创建订单，而是代表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Redis 层抢购资格已经通过</span><br><span class="line">订单消息已经进入 Stream</span><br></pre></td></tr></table></figure>
+
+<p>这就是异步化的关键。</p>
+<h2 id="后台消费者：从-Stream-到-MySQL"><a href="#后台消费者：从-Stream-到-MySQL" class="headerlink" title="后台消费者：从 Stream 到 MySQL"></a>后台消费者：从 Stream 到 MySQL</h2><p>Redis Stream 相当于一个轻量消息队列。</p>
+<p>秒杀请求通过 Lua 写入：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">stream.orders</span><br></pre></td></tr></table></figure>
+
+<p>后台 goroutine 使用消费者组读取消息：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> Start(ctx context.Context) &#123;</span><br><span class="line">    s.initSeckillStream(ctx)</span><br><span class="line">    <span class="keyword">go</span> s.handleVoucherOrder(ctx)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> initSeckillStream(ctx context.Context) &#123;</span><br><span class="line">    err := s.redisClient.XGroupCreateMkStream(</span><br><span class="line">        ctx,</span><br><span class="line">        constants.SeckillStreamKey,</span><br><span class="line">        constants.SeckillConsumerGroup,</span><br><span class="line">        <span class="string">&quot;0&quot;</span>,</span><br><span class="line">    ).Err()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &amp;&amp; !strings.Contains(err.Error(), <span class="string">&quot;BUSYGROUP&quot;</span>) &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[seckill] create stream group failed: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>真正的消费循环：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> handleVoucherOrder(ctx context.Context) &#123;</span><br><span class="line">    s.handlePendingList(ctx)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> &#123;</span><br><span class="line">        <span class="keyword">select</span> &#123;</span><br><span class="line">        <span class="keyword">case</span> &lt;-ctx.Done():</span><br><span class="line">            log.Println(<span class="string">&quot;[seckill] voucher order consumer stopped&quot;</span>)</span><br><span class="line">            <span class="keyword">return</span></span><br><span class="line">        <span class="keyword">default</span>:</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        streams, err := s.redisClient.XReadGroup(ctx, &amp;redis.XReadGroupArgs&#123;</span><br><span class="line">            Group:    constants.SeckillConsumerGroup,</span><br><span class="line">            Consumer: constants.SeckillConsumerName,</span><br><span class="line">            Streams:  []<span class="type">string</span>&#123;constants.SeckillStreamKey, <span class="string">&quot;&gt;&quot;</span>&#125;,</span><br><span class="line">            Count:    <span class="number">1</span>,</span><br><span class="line">            Block:    <span class="number">2</span> * time.Second,</span><br><span class="line">        &#125;).Result()</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> errors.Is(err, redis.Nil) &#123;</span><br><span class="line">            s.handlePendingList(ctx)</span><br><span class="line">            <span class="keyword">continue</span></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">            log.Printf(<span class="string">&quot;[seckill] read stream failed: %v&quot;</span>, err)</span><br><span class="line">            time.Sleep(<span class="number">500</span> * time.Millisecond)</span><br><span class="line">            s.handlePendingList(ctx)</span><br><span class="line">            <span class="keyword">continue</span></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">for</span> _, stream := <span class="keyword">range</span> streams &#123;</span><br><span class="line">            <span class="keyword">for</span> _, msg := <span class="keyword">range</span> stream.Messages &#123;</span><br><span class="line">                s.handleMessageWithRetry(ctx, msg)</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里有两个细节：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">1. 服务启动时先处理 pending 消息，防止上次宕机留下未 ACK 的订单。</span><br><span class="line">2. 空闲时也顺手扫 pending，提高可靠性。</span><br></pre></td></tr></table></figure>
+
+<p>消息解析后进入数据库事务：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> handleVoucherOrderMessage(ctx context.Context, msg redis.XMessage) <span class="type">error</span> &#123;</span><br><span class="line">    order, err := parseVoucherOrderMessage(msg)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> s.orderRepo.CreateSeckillOrder(ctx, order)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>解析 Stream 消息：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">parseVoucherOrderMessage</span><span class="params">(msg redis.XMessage)</span></span> (*model.VoucherOrder, <span class="type">error</span>) &#123;</span><br><span class="line">    orderID, err := parseInt64FromStream(msg, <span class="string">&quot;id&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    userID, err := parseInt64FromStream(msg, <span class="string">&quot;userId&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    voucherID, err := parseInt64FromStream(msg, <span class="string">&quot;voucherId&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    now := time.Now()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> &amp;model.VoucherOrder&#123;</span><br><span class="line">        ID:         orderID,</span><br><span class="line">        UserID:     userID,</span><br><span class="line">        VoucherID:  voucherID,</span><br><span class="line">        Status:     <span class="number">1</span>,</span><br><span class="line">        CreateTime: now,</span><br><span class="line">        UpdateTime: now,</span><br><span class="line">    &#125;, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>数据库事务里做三件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 一人一单兜底检查</span><br><span class="line">2. MySQL 乐观锁扣库存</span><br><span class="line">3. 创建订单</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *voucherOrderRepository)</span></span> CreateSeckillOrder(ctx context.Context, order *model.VoucherOrder) <span class="type">error</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> order == <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> errors.New(<span class="string">&quot;empty voucher order&quot;</span>)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    now := time.Now()</span><br><span class="line">    <span class="keyword">if</span> order.CreateTime.IsZero() &#123;</span><br><span class="line">        order.CreateTime = now</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> order.UpdateTime.IsZero() &#123;</span><br><span class="line">        order.UpdateTime = now</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> r.db.WithContext(ctx).Transaction(<span class="function"><span class="keyword">func</span><span class="params">(tx *gorm.DB)</span></span> <span class="type">error</span> &#123;</span><br><span class="line">        <span class="keyword">var</span> count <span class="type">int64</span></span><br><span class="line">        <span class="keyword">if</span> err := tx.Model(&amp;model.VoucherOrder&#123;&#125;).</span><br><span class="line">            Where(<span class="string">&quot;user_id = ? AND voucher_id = ?&quot;</span>, order.UserID, order.VoucherID).</span><br><span class="line">            Count(&amp;count).Error; err != <span class="literal">nil</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> err</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> count &gt; <span class="number">0</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        res := tx.Model(&amp;model.SeckillVoucher&#123;&#125;).</span><br><span class="line">            Where(<span class="string">&quot;voucher_id = ? AND stock &gt; 0&quot;</span>, order.VoucherID).</span><br><span class="line">            UpdateColumn(<span class="string">&quot;stock&quot;</span>, gorm.Expr(<span class="string">&quot;stock - 1&quot;</span>))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> res.Error != <span class="literal">nil</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> res.Error</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> res.RowsAffected == <span class="number">0</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> errors.New(<span class="string">&quot;stock not enough&quot;</span>)</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> tx.Create(order).Error</span><br><span class="line">    &#125;)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>虽然 Redis 已经做了一人一单判断，但 MySQL 仍然要做兜底。</p>
+<p>因为异步系统里要接受一个现实：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">消息可能重复投递</span><br><span class="line">服务可能中途重启</span><br><span class="line">Redis 判断成功不代表 MySQL 一定成功</span><br></pre></td></tr></table></figure>
+
+<p>所以数据库唯一索引也很重要：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">ALTER TABLE</span> tb_voucher_order</span><br><span class="line"><span class="keyword">ADD</span> <span class="keyword">UNIQUE</span> KEY uk_user_voucher (user_id, voucher_id);</span><br></pre></td></tr></table></figure>
+
+<h2 id="从“能消费”到“可靠消费”：Pending-与-DLQ"><a href="#从“能消费”到“可靠消费”：Pending-与-DLQ" class="headerlink" title="从“能消费”到“可靠消费”：Pending 与 DLQ"></a>从“能消费”到“可靠消费”：Pending 与 DLQ</h2><p>一开始消费者只要读取消息、处理订单、ACK 就可以。</p>
+<p>但是如果服务在读到消息后宕机，这条消息就不会被 ACK，会留在 Pending List。</p>
+<p>所以消费者启动时要先处理 pending：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> handlePendingList(ctx context.Context) &#123;</span><br><span class="line">    <span class="keyword">for</span> &#123;</span><br><span class="line">        <span class="keyword">select</span> &#123;</span><br><span class="line">        <span class="keyword">case</span> &lt;-ctx.Done():</span><br><span class="line">            <span class="keyword">return</span></span><br><span class="line">        <span class="keyword">default</span>:</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        streams, err := s.redisClient.XReadGroup(ctx, &amp;redis.XReadGroupArgs&#123;</span><br><span class="line">            Group:    constants.SeckillConsumerGroup,</span><br><span class="line">            Consumer: constants.SeckillConsumerName,</span><br><span class="line">            Streams:  []<span class="type">string</span>&#123;constants.SeckillStreamKey, <span class="string">&quot;0&quot;</span>&#125;,</span><br><span class="line">            Count:    <span class="number">1</span>,</span><br><span class="line">            Block:    <span class="number">0</span>,</span><br><span class="line">        &#125;).Result()</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> errors.Is(err, redis.Nil) &#123;</span><br><span class="line">            <span class="keyword">return</span></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">            log.Printf(<span class="string">&quot;[seckill] read pending failed: %v&quot;</span>, err)</span><br><span class="line">            time.Sleep(<span class="number">500</span> * time.Millisecond)</span><br><span class="line">            <span class="keyword">continue</span></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> <span class="built_in">len</span>(streams) == <span class="number">0</span> || <span class="built_in">len</span>(streams[<span class="number">0</span>].Messages) == <span class="number">0</span> &#123;</span><br><span class="line">            <span class="keyword">return</span></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">for</span> _, stream := <span class="keyword">range</span> streams &#123;</span><br><span class="line">            <span class="keyword">for</span> _, msg := <span class="keyword">range</span> stream.Messages &#123;</span><br><span class="line">                ok := s.handleMessageWithRetry(ctx, msg)</span><br><span class="line">                <span class="keyword">if</span> !ok &#123;</span><br><span class="line">                    <span class="keyword">return</span></span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里我没有让 pending 消息在一次循环里疯狂重试到底，而是让 <code>handleMessageWithRetry</code> 返回一个布尔值。</p>
+<p>如果这次处理失败，但还没达到最大重试次数，就先返回，等下一轮再处理。</p>
+<p>这样可以避免 MySQL 短暂故障时，消息很快被连续重试 3 次然后直接进死信队列。</p>
+<p>统一处理消息的方法：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> handleMessageWithRetry(ctx context.Context, msg redis.XMessage) <span class="type">bool</span> &#123;</span><br><span class="line">    err := s.handleVoucherOrderMessage(ctx, msg)</span><br><span class="line">    <span class="keyword">if</span> err == <span class="literal">nil</span> &#123;</span><br><span class="line">        s.ackMessage(ctx, msg.ID)</span><br><span class="line">        s.clearRetryCount(ctx, msg.ID)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    retryCount, retryErr := s.increaseRetryCount(ctx, msg.ID)</span><br><span class="line">    <span class="keyword">if</span> retryErr != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[seckill] increase retry count failed, msgID=%s err=%v&quot;</span>, msg.ID, retryErr)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> retryCount &lt; constants.SeckillMaxRetry &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[seckill] message will retry later, msgID=%s retry=%d&quot;</span>, msg.ID, retryCount)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> dlqErr := s.moveToDLQ(ctx, msg, err, retryCount); dlqErr != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Printf(<span class="string">&quot;[seckill] move message to DLQ failed, msgID=%s err=%v&quot;</span>, msg.ID, dlqErr)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    s.ackMessage(ctx, msg.ID)</span><br><span class="line">    s.clearRetryCount(ctx, msg.ID)</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>重试次数使用 Redis 记录：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> increaseRetryCount(ctx context.Context, msgID <span class="type">string</span>) (<span class="type">int64</span>, <span class="type">error</span>) &#123;</span><br><span class="line">    key := constants.SeckillRetryKey + msgID</span><br><span class="line"></span><br><span class="line">    count, err := s.redisClient.Incr(ctx, key).Result()</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>, err</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    _ = s.redisClient.Expire(ctx, key, <span class="number">24</span>*time.Hour).Err()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> count, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>超过 3 次后，消息进入死信流：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *voucherOrderService)</span></span> moveToDLQ(ctx context.Context, msg redis.XMessage, cause <span class="type">error</span>, retryCount <span class="type">int64</span>) <span class="type">error</span> &#123;</span><br><span class="line">    values := <span class="keyword">map</span>[<span class="type">string</span>]<span class="keyword">interface</span>&#123;&#125;&#123;</span><br><span class="line">        <span class="string">&quot;originMsgId&quot;</span>: msg.ID,</span><br><span class="line">        <span class="string">&quot;reason&quot;</span>:      cause.Error(),</span><br><span class="line">        <span class="string">&quot;retryCount&quot;</span>:  retryCount,</span><br><span class="line">        <span class="string">&quot;failedAt&quot;</span>:    time.Now().Format(time.RFC3339),</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> k, v := <span class="keyword">range</span> msg.Values &#123;</span><br><span class="line">        values[k] = fmt.Sprint(v)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> s.redisClient.XAdd(ctx, &amp;redis.XAddArgs&#123;</span><br><span class="line">        Stream: constants.SeckillDLQStreamKey,</span><br><span class="line">        Values: values,</span><br><span class="line">    &#125;).Err()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>死信队列的意义不是自动修复一切，而是避免系统在一条坏消息上卡死。</p>
+<p>后面可以用：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">XRANGE stream.orders.dlq - +</span><br></pre></td></tr></table></figure>
+
+<p>去看失败原因，再人工处理。</p>
+<h2 id="优雅停机：让-goroutine-有机会收尾"><a href="#优雅停机：让-goroutine-有机会收尾" class="headerlink" title="优雅停机：让 goroutine 有机会收尾"></a>优雅停机：让 goroutine 有机会收尾</h2><p>之前消费者 goroutine 是死循环，进程退出时直接被杀。</p>
+<p>今天把它改成通过 <code>context</code> 控制：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">appCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)</span><br><span class="line"><span class="keyword">defer</span> stop()</span><br></pre></td></tr></table></figure>
+
+<p>消费者启动时传入这个 context：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">services.VoucherOrder.Start(appCtx)</span><br></pre></td></tr></table></figure>
+
+<p>消费者循环里检查：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">select</span> &#123;</span><br><span class="line"><span class="keyword">case</span> &lt;-ctx.Done():</span><br><span class="line">    log.Println(<span class="string">&quot;[seckill] voucher order consumer stopped&quot;</span>)</span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line"><span class="keyword">default</span>:</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>HTTP 服务也改成 <code>http.Server</code>，这样才能调用 <code>Shutdown</code>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">server := &amp;http.Server&#123;</span><br><span class="line">    Addr:    addr,</span><br><span class="line">    Handler: engine,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">    log.Printf(<span class="string">&quot;hmdp-go server started on %s&quot;</span>, addr)</span><br><span class="line">    <span class="keyword">if</span> err := server.ListenAndServe(); err != <span class="literal">nil</span> &amp;&amp; !errors.Is(err, http.ErrServerClosed) &#123;</span><br><span class="line">        log.Fatalf(<span class="string">&quot;run server: %v&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;()</span><br><span class="line"></span><br><span class="line">&lt;-appCtx.Done()</span><br><span class="line">log.Println(<span class="string">&quot;server shutting down...&quot;</span>)</span><br><span class="line"></span><br><span class="line">shutdownCtx, cancel := context.WithTimeout(context.Background(), <span class="number">10</span>*time.Second)</span><br><span class="line"><span class="keyword">defer</span> cancel()</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> err := server.Shutdown(shutdownCtx); err != <span class="literal">nil</span> &#123;</span><br><span class="line">    log.Printf(<span class="string">&quot;server shutdown failed: %v&quot;</span>, err)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">log.Println(<span class="string">&quot;server stopped&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这里我踩过一个坑：不能先调用 <code>engine.Run(addr)</code>。</p>
+<p>因为 <code>engine.Run</code> 是阻塞的，后面的 <code>http.Server</code> 优雅停机逻辑根本不会执行。</p>
+<p>最终修正为只使用 <code>http.Server.ListenAndServe</code>。</p>
+<h2 id="今天的几个关键思考"><a href="#今天的几个关键思考" class="headerlink" title="今天的几个关键思考"></a>今天的几个关键思考</h2><p>这次秒杀优化最大的变化，不是“用了 Lua 和 Stream”这么简单。</p>
+<p>真正的思路变化是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">同步链路变短</span><br><span class="line">强一致写入后移</span><br><span class="line">Redis 负责前置拦截</span><br><span class="line">MySQL 负责最终落库</span><br><span class="line">消息队列负责削峰</span><br><span class="line">DLQ 负责隔离坏消息</span><br><span class="line">context 负责工程化退出</span><br></pre></td></tr></table></figure>
+
+<p>有些地方仍然不是最终工业级。</p>
+<p>比如消费者名现在还是固定的：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">c1</span><br></pre></td></tr></table></figure>
+
+<p>单机学习没问题，多实例部署时应该用机器名或进程 ID 生成不同 consumer name。</p>
+<p>另外，DLQ 现在只做了简单重试计数，没有精细区分错误类型。后面可以继续优化：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">唯一索引冲突：订单已存在，直接 ACK</span><br><span class="line">字段解析失败：直接进 DLQ</span><br><span class="line">MySQL 临时故障：可以重试</span><br><span class="line">库存不一致：告警并进 DLQ</span><br></pre></td></tr></table></figure>
+
+<p>但就当前阶段来说，已经从“能跑的秒杀”往“有工程保护的秒杀”迈了一大步。</p>
+<p>最后用一条完整链路收尾：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">新增秒杀券</span><br><span class="line">-&gt; MySQL 事务保存 tb_voucher 与 tb_seckill_voucher</span><br><span class="line">-&gt; Redis 预热库存</span><br><span class="line"></span><br><span class="line">用户抢券</span><br><span class="line">-&gt; Lua 原子判断库存和一人一单</span><br><span class="line">-&gt; Redis 扣库存</span><br><span class="line">-&gt; XADD 写入 Stream</span><br><span class="line">-&gt; 立即返回订单 ID</span><br><span class="line"></span><br><span class="line">后台消费</span><br><span class="line">-&gt; XREADGROUP 读取订单消息</span><br><span class="line">-&gt; MySQL 事务扣库存和创建订单</span><br><span class="line">-&gt; 成功 ACK</span><br><span class="line">-&gt; 失败重试</span><br><span class="line">-&gt; 超过次数进入 DLQ</span><br><span class="line"></span><br><span class="line">服务退出</span><br><span class="line">-&gt; SIGINT/SIGTERM 触发 context cancel</span><br><span class="line">-&gt; HTTP server Shutdown</span><br><span class="line">-&gt; 消费者退出循环</span><br></pre></td></tr></table></figure>
+
+<p>今天这部分写完后，黑马点评里最核心的秒杀主线终于成型了。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/06/28/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20Lua%20Stream%E5%AE%9E%E7%8E%B0%E5%BC%82%E6%AD%A5%E7%A7%92%E6%9D%80%E4%B8%8E%E5%B7%A5%E7%A8%8B%E5%8C%96%E4%BC%98%E5%8C%96/" data-id="cuidWPoOGNm9u-29bUMyW0m-T" data-title="Go 版黑马点评：Redis Lua Stream 实现异步秒杀与工程化优化" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Go/" rel="tag">Go</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Lua/" rel="tag">Lua</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Stream/" rel="tag">Stream</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%A7%92%E6%9D%80/" rel="tag">秒杀</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/06/25/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20BitMap%E5%AE%9E%E7%8E%B0%E7%94%A8%E6%88%B7%E7%AD%BE%E5%88%B0%E4%B8%8E%E8%BF%9E%E7%BB%AD%E7%AD%BE%E5%88%B0%E7%BB%9F%E8%AE%A1/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">Go 版黑马点评：Redis BitMap 实现用户签到与连续签到统计</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/">Go</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/Go/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/">黑马点评</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/BitMap/" rel="tag">BitMap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feed%E6%B5%81/" rel="tag">Feed流</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GORM/" rel="tag">GORM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gin/" rel="tag">Gin</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Go/" rel="tag">Go</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Lua/" rel="tag">Lua</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nginx/" rel="tag">Nginx</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OSS/" rel="tag">OSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Set/" rel="tag">Set</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Stream/" rel="tag">Stream</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Viper/" rel="tag">Viper</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ZSet/" rel="tag">ZSet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" rel="tag">中间件</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%85%B3%E6%B3%A8/" rel="tag">关注</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" rel="tag">文件上传</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%82%B9%E8%B5%9E/" rel="tag">点赞</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%99%BB%E5%BD%95/" rel="tag">登录</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%A7%92%E6%9D%80/" rel="tag">秒杀</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%AD%BE%E5%88%B0/" rel="tag">签到</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BC%93%E5%AD%98/" rel="tag">缓存</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" rel="tag">项目架构</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" rel="tag">首页接口</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/BitMap/" style="font-size: 10px;">BitMap</a> <a href="/tags/Feed%E6%B5%81/" style="font-size: 10px;">Feed流</a> <a href="/tags/GORM/" style="font-size: 13.33px;">GORM</a> <a href="/tags/Gin/" style="font-size: 20px;">Gin</a> <a href="/tags/Go/" style="font-size: 10px;">Go</a> <a href="/tags/Lua/" style="font-size: 10px;">Lua</a> <a href="/tags/MySQL/" style="font-size: 10px;">MySQL</a> <a href="/tags/Nginx/" style="font-size: 10px;">Nginx</a> <a href="/tags/OSS/" style="font-size: 10px;">OSS</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Set/" style="font-size: 10px;">Set</a> <a href="/tags/Stream/" style="font-size: 10px;">Stream</a> <a href="/tags/Viper/" style="font-size: 10px;">Viper</a> <a href="/tags/ZSet/" style="font-size: 10px;">ZSet</a> <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BB%B6/" style="font-size: 10px;">中间件</a> <a href="/tags/%E5%85%B3%E6%B3%A8/" style="font-size: 10px;">关注</a> <a href="/tags/%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0/" style="font-size: 10px;">文件上传</a> <a href="/tags/%E7%82%B9%E8%B5%9E/" style="font-size: 10px;">点赞</a> <a href="/tags/%E7%99%BB%E5%BD%95/" style="font-size: 10px;">登录</a> <a href="/tags/%E7%A7%92%E6%9D%80/" style="font-size: 10px;">秒杀</a> <a href="/tags/%E7%AD%BE%E5%88%B0/" style="font-size: 10px;">签到</a> <a href="/tags/%E7%BC%93%E5%AD%98/" style="font-size: 10px;">缓存</a> <a href="/tags/%E9%A1%B9%E7%9B%AE%E6%9E%B6%E6%9E%84/" style="font-size: 10px;">项目架构</a> <a href="/tags/%E9%A6%96%E9%A1%B5%E6%8E%A5%E5%8F%A3/" style="font-size: 10px;">首页接口</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/06/28/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20Lua%20Stream%E5%AE%9E%E7%8E%B0%E5%BC%82%E6%AD%A5%E7%A7%92%E6%9D%80%E4%B8%8E%E5%B7%A5%E7%A8%8B%E5%8C%96%E4%BC%98%E5%8C%96/">Go 版黑马点评：Redis Lua Stream 实现异步秒杀与工程化优化</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/25/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9ARedis%20BitMap%E5%AE%9E%E7%8E%B0%E7%94%A8%E6%88%B7%E7%AD%BE%E5%88%B0%E4%B8%8E%E8%BF%9E%E7%BB%AD%E7%AD%BE%E5%88%B0%E7%BB%9F%E8%AE%A1/">Go 版黑马点评：Redis BitMap 实现用户签到与连续签到统计</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/24/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%BA%97%E9%93%BA%E8%AF%A6%E6%83%85Redis%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96%E8%AF%A6%E8%A7%A3/">Go 版黑马点评：店铺详情 Redis 缓存优化详解</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E9%98%BF%E9%87%8C%E4%BA%91OSS%E5%AE%9E%E7%8E%B0%E5%8D%9A%E5%AE%A2%E5%9B%BE%E7%89%87%E4%B8%8A%E4%BC%A0%E4%B8%8E%E5%88%A0%E9%99%A4/">Go 版黑马点评：阿里云 OSS 实现博客图片上传与删除</a>
+          </li>
+        
+          <li>
+            <a href="/2026/06/23/Go%E7%89%88%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84%EF%BC%9A%E5%8F%91%E5%B8%83%E5%8D%9A%E5%AE%A2%E4%B8%8ERedisFeed%E6%B5%81%E6%8E%A8%E9%80%81%E8%AF%A6%E8%A7%A3/">Go 版黑马点评：发布博客与 Redis Feed 流推送详解</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 一点甜a<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
